@@ -16,7 +16,15 @@
 |iOS |[下载]( https://www.volcengine.com/docs/6394/75741) |[文档]( https://www.volcengine.com/docs/6394/75743) |[文档]( https://www.volcengine.com/docs/6394/75747) |
 |Web/H5 |[下载]( https://www.volcengine.com/docs/6394/75741) |[文档]( https://www.volcengine.com/docs/6394/75744) |[文档]( https://www.volcengine.com/docs/6394/75747) |
 |Windows |[下载]( https://www.volcengine.com/docs/6394/75741) |[文档]( https://www.volcengine.com/docs/6394/1156707) |[文档]( https://www.volcengine.com/docs/6394/75747) |
-|MobileUse |[下载]( https://www.volcengine.com/docs/6394/1783697) |[文档]( https://www.volcengine.com/docs/6394/1783697) |[文档]( https://www.volcengine.com/docs/6394/1953040) |
+
+# Mobile Use Agent 接入请参考
+
+方案介绍： https://www.volcengine.com/docs/6394/1583515?lang=zh&_vtm_=0.0.c7956061.d48218.0
+Open API接口文档：https://www.volcengine.com/docs/6394/1953040?lang=zh
+Skill 获取：
+[find skill](https://findskill.com/volcengine/ACEP/volcengine-ACEP-mobile_use)
+[clawhub](https://clawhub.ai/volcengine-skills/byted-ai-mobileuse-agent)
+
 
 ## 联系我们
 
