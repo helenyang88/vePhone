@@ -1,9 +1,10 @@
 # 火山引擎 Mobile Use / Cloud Phone Python 示例
 
-本仓库包含两类示例：
+本仓库包含三类示例：
 
 - `openapi_sample/`：最小化的 OpenAPI 调用示例（适合快速验证 AK/SK、网络与接口连通性）
 - `ui_test_demo/`：用例驱动的 UI 自动化执行器（读取 `cases/*.md`，调用云端能力执行并生成报告）
+- `chatAction/`：接入非火山云手机设备，使用通用adb方式，输入截图和自然语言目标，获取并可选执行单步 UI 动作的 ChatAction 示例
 
 ---
 
@@ -13,6 +14,10 @@
 mobile-use-demo/
 ├── openapi_sample/
 │   └── python_openapi_sample.py    # OpenAPI 调用示例
+├── chatAction/                     # ChatAction + ADB 单步交互示例
+│   ├── README.md
+│   ├── chat_action_demo.py
+│   └── test_chat_action_demo.py
 ├── ui_test_demo/                   # UI 自动化示例（含 CLI、用例与报告页面）
 │   ├── README.md
 │   ├── cases/
@@ -103,6 +108,18 @@ uv run python -m src.main run
 - 增量结果：`ui_test_demo/results/*.jsonl`
 - 汇总结果：`ui_test_demo/results/*.json`
 - 页面报告：打开 `ui_test_demo/results.html`
+
+### C) 跑通 ChatAction 单步示例（`chatAction/`）
+
+该示例通过 ADB 获取 Android 截图，调用 `ChatAction` 返回 `tap`、`swipe`、
+`longPress`、`type` 或 `none`，默认只输出建议，显式添加 `--execute` 后才执行。
+
+```bash
+cd chatAction
+python3 -m pip install -r requirements.txt
+```
+
+详细参数、安全约束和测试方式见 [`chatAction/README.md`](./chatAction/README.md)。
 
 ---
 
