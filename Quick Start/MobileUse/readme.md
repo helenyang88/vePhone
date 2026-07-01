@@ -4,7 +4,7 @@
 
 - `openapi_sample/`：最小化的 OpenAPI 调用示例（适合快速验证 AK/SK、网络与接口连通性）
 - `ui_test_demo/`：用例驱动的 UI 自动化执行器（读取 `cases/*.md`，调用云端能力执行并生成报告）
-- `chatAction/`：输入截图和自然语言目标，获取并可选执行单步 UI 动作的 ChatAction 示例
+- `chatAction/`：接入非火山云手机设备，使用通用adb方式，输入截图和自然语言目标，获取并可选执行单步 UI 动作的 ChatAction 示例
 
 ---
 
