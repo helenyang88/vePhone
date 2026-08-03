@@ -25,6 +25,11 @@ Skill 获取：
 [find skill](https://findskill.com/volcengine/ACEP/volcengine-ACEP-mobile_use)
 [clawhub](https://clawhub.ai/volcengine-skills/byted-ai-mobileuse-agent)
 
+## Security and privacy
+
+This project takes security seriously.
+
+For vulnerability reporting and supported versions, see [SECURITY.md](SECURITY.md).
 
 ## 联系我们
 
