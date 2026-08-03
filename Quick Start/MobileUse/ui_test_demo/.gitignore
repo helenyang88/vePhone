@@ -1,20 +1,46 @@
-# ByteDance/Python project gitignore
-__pycache__/
-*.py[cod]
-*.egg-info/
+node_modules/
+.venv/
 .pytest_cache/
 .ruff_cache/
-.mypy_cache/
-.coverage
-coverage.xml
-htmlcov/
 .DS_Store
-.idea/
-.vscode/
-.venv/
-env/
-.env
-uv.lock
 dist/
 build/
+data/
+.env
+.env.local
 *.log
+.vscode/
+.idea/
+__pycache__/
+*.pyc
+.next/
+coverage/
+.superpowers/
+test-results/
+playwright-report/
+blob-report/
+
+# Local runtime / database leftovers
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+
+# Local temp artifacts
+.tmp/
+tmp-*.mjs
+tmp-*.png
+
+# Generated UI/prototype artifacts
+floating-ui-showcase/
+
+# Local agent/tooling artifacts
+.agents/
+skills-lock.json
+
+# Local development reports
+sdd/
+
+# Local planning artifacts
+/docs/superpowers/

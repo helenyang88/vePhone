@@ -1,0 +1,53 @@
+{
+  "ResponseMetadata": {
+    "RequestId": "req-result-pass",
+    "Action": "GetAgentResult",
+    "Version": "2023-08-01",
+    "Service": "ipaas",
+    "Region": "cn-north-1"
+  },
+  "Result": {
+    "IsSuccess": 1,
+    "Content": "任务执行完成",
+    "StructOutput": {
+      "status": "pass",
+      "reason": "",
+      "steps": [
+        {
+          "index": 1,
+          "status": "passed",
+          "log": "首页已打开"
+        }
+      ],
+      "assertions": [
+        {
+          "index": 1,
+          "result": "pass",
+          "evidence": [
+            "页面出现首页"
+          ]
+        }
+      ],
+      "evidence": [
+        "截图显示首页标题"
+      ]
+    },
+    "ScreenShots": {
+      "1": {
+        "screenshot": "https://example.invalid/sanitized.png",
+        "original_dimensions": [
+          720,
+          1520
+        ],
+        "screenshot_dimensions": [
+          720,
+          1520
+        ]
+      }
+    },
+    "Usage": {
+      "in_tokens": 123,
+      "out_tokens": "45"
+    }
+  }
+}
