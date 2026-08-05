@@ -4,24 +4,20 @@ import android.app.Application;
 import android.util.Log;
 import android.widget.Toast;
 
-import androidx.annotation.NonNull;
-
 import com.blankj.utilcode.util.ProcessUtils;
-import com.volcengine.androidcloud.common.log.AcLog;
 import com.volcengine.cloudphone.apiservice.outinterface.ICloudCoreManagerStatusListener;
-import com.volcengine.cloudphone.apiservice.outinterface.InitListener;
 import com.volcengine.phone.VePhoneEngine;
-
-import org.jetbrains.annotations.NotNull;
 
 public class InitApplication extends Application {
 
     private static final String TAG = "TAG_INIT";
 
+    public static Application APP;
+
     @Override
     public void onCreate() {
         super.onCreate();
-
+        APP = this;
         /*
          * 目前仅支持在主进程中初始化VePhoneEngine
          */

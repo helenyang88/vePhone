@@ -12,6 +12,7 @@ import androidx.annotation.Nullable;
 
 import com.blankj.utilcode.constant.PermissionConstants;
 import com.blankj.utilcode.util.PermissionUtils;
+import com.example.sdkdemo.AppSettings;
 import com.example.sdkdemo.R;
 import com.example.sdkdemo.base.BasePlayActivity;
 import com.example.sdkdemo.databinding.ActivityAppSimulationBinding;
@@ -113,18 +114,17 @@ public class AppSimulationActivity extends BasePlayActivity {
         SdkUtil.checkPlayAuth(auth,
                 p -> {
                     PhonePlayConfig.Builder builder = new PhonePlayConfig.Builder();
-                    builder.userId(SdkUtil.getClientUid())
-                            .ak(auth.ak)
+                    builder.ak(auth.ak)
                             .sk(auth.sk)
                             .token(auth.token)
                             .productId(auth.productId)
                             .podId(auth.podId)
                             .container(container)
-                            .enableLocationService(true)
-                            .enableLightSensor(true)  // setLightSensorState作用相同
-                            .syncInfoScope(SyncInfoScope.ALL)
+                            .enableLocalKeyboard(AppSettings.ENABLE_LOCAL_KEYBOARD)
+                            .remoteWindowSize(AppSettings.ENABLE_FULL_SCREEN ? -1 : 0, AppSettings.ENABLE_FULL_SCREEN ? -1 : 0)
+                            .enableLightSensor(true)  // 开启光线传感器，setLightSensorState作用相同
+                            .syncInfoScope(SyncInfoScope.ALL) // 开启WiFi，Radio数据同步
                             .syncInfoStrategy(SyncInfoStrategy.whenChanged())
-                            .remoteWindowSize(0,0)  //按pod原始分辨率推流
                             .streamListener(this);
                     VePhoneEngine.getInstance().start(builder.build(), this);
                 },

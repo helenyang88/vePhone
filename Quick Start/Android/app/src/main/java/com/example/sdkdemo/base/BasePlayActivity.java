@@ -7,13 +7,17 @@ import android.content.DialogInterface;
 import android.content.res.Configuration;
 import android.util.Log;
 import android.view.View;
+import android.view.ViewGroup;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 
+import com.example.sdkdemo.AppSettings;
 import com.example.sdkdemo.R;
 import com.example.sdkdemo.feature.MessageChannelActivity;
+import com.example.sdkdemo.util.SdkUtil;
 import com.volcengine.androidcloud.common.model.RotationState;
 import com.volcengine.androidcloud.common.model.StreamStats;
 import com.volcengine.androidcloud.common.pod.Rotation;
@@ -23,6 +27,7 @@ import com.volcengine.cloudcore.common.mode.StreamType;
 import com.volcengine.cloudphone.apiservice.outinterface.IPlayerListener;
 import com.volcengine.cloudphone.apiservice.outinterface.IStreamListener;
 import com.volcengine.common.SDKContext;
+import com.volcengine.phone.PhonePlayConfig;
 import com.volcengine.phone.VePhoneEngine;
 
 import java.text.MessageFormat;
@@ -313,5 +318,20 @@ public class BasePlayActivity extends AppCompatActivity implements IPlayerListen
         if (loadingUI != null) {
             loadingUI.setVisibility(visible ? View.VISIBLE : View.GONE);
         }
+    }
+
+
+    protected @NonNull PhonePlayConfig buildPhonePlayConfig(@NonNull SdkUtil.PlayAuth auth, @Nullable ViewGroup container) {
+        return new PhonePlayConfig.Builder().ak(auth.ak)
+                .sk(auth.sk)
+                .token(auth.token)
+                .container(container)
+                .podId(auth.podId)
+                .productId(auth.productId)
+                .enableLocalKeyboard(AppSettings.ENABLE_LOCAL_KEYBOARD)
+                .autoRecycleTime(AppSettings.AUTO_RECYCLE_TIME)
+                .remoteWindowSize(AppSettings.ENABLE_FULL_SCREEN ? -1 : 0, AppSettings.ENABLE_FULL_SCREEN ? -1 : 0)
+                .streamListener(this)
+                .build();
     }
 }

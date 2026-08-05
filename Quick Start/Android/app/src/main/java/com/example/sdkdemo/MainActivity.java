@@ -21,6 +21,7 @@ import com.example.sdkdemo.feature.RotationModeActivity;
 import com.example.sdkdemo.feature.SensorActivity;
 import com.example.sdkdemo.feature.TouchEventServiceActivity;
 import com.example.sdkdemo.feature.UserServiceActivity;
+import com.example.sdkdemo.feature.VeProxyActivity;
 import com.example.sdkdemo.feature.VideoRenderModeManagerActivity;
 import com.example.sdkdemo.util.SdkUtil;
 
@@ -54,6 +55,7 @@ public class MainActivity extends BaseListActivity {
         holder.addItem(R.string.user_service, R.string.user_service_desc, UserServiceActivity.class);
         holder.addItem(R.string.video_render_mode, R.string.video_render_mode_desc, VideoRenderModeManagerActivity.class);
         holder.addItem(R.string.sensor, R.string.sensor_desc, SensorActivity.class);
+        holder.addItem(R.string.ve_proxy, R.string.ve_proxy_desc, VeProxyActivity.class);
         holder.addItem(R.string.unclassified, R.string.unclassified_desc, OthersActivity.class);
     }
 
