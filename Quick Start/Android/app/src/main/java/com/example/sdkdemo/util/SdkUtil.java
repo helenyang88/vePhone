@@ -33,6 +33,7 @@ public class SdkUtil {
      * <br>
      * - 正式技术方案阶段：<br>
      * 业务侧服务端负责调用火山STS接口为客户端生成鉴权密钥，客户端从服务端获取到临时ak、sk、token后进行start拉流<br>
+     *
      * <p><font color='red'>Note: manifest中的VOLC_ACCOUNT_ID信息也是鉴权的一部分，须替换为您的accountId</font></p>
      * @docs <a href="https://www.volcengine.com/docs/6394/1262151?lang=zh">获取临时密钥（STS）</a>
      */
@@ -68,7 +69,7 @@ public class SdkUtil {
      * 补充：当不同端的userId重复时，会发生冲突，表现为后进房的客户端会把先进房的客户端踢出房间
      */
     public @NonNull static String getClientUid() {
-        return "android_github_" + VePhoneEngine.getInstance().getDeviceId();
+        return "android_" + VePhoneEngine.getInstance().getDeviceId();
     }
 
     /**

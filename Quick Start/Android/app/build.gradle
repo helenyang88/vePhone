@@ -15,6 +15,7 @@ android {
         versionName "1.0"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        multiDexEnabled true
     }
 
     buildTypes {
@@ -50,7 +51,7 @@ dependencies {
     // 官网：https://www.volcengine.com/docs/6394/1274174?lang=zh
     ///////////////////////////////////////////////////////////////////////////
     // 集成方式一：Maven依赖，推荐
-    def sdk_version = "1.65.0"
+    def sdk_version = "1.73.0"
     implementation "com.volcengine.vephone:vephone:$sdk_version"
     // 集成方式二：下载离线包，从火山云手机官网获取
     /*implementation files('libs/phone-lite-release.aar')*/
@@ -59,6 +60,12 @@ dependencies {
     // 云手机游戏手柄套件【可选】
     ///////////////////////////////////////////////////////////////////////////
     implementation 'com.volcengine.vegame:VeGameConsole:1.0.5'
+
+
+    ///////////////////////////////////////////////////////////////////////////
+    // 云手机网络代理套件【可选】
+    ///////////////////////////////////////////////////////////////////////////
+    implementation "com.volcengine.vephone:veproxy:1.0.10"
 
 
     implementation fileTree(dir: 'libs', include: ['*.jar'])

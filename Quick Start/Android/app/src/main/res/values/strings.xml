@@ -191,4 +191,8 @@
 
     <string name="app_simulation">仿真</string>
     <string name="app_simulation_best_practice">应用仿真问题最佳实践</string>
+
+
+    <string name="ve_proxy">客户端网络代理</string>
+    <string name="ve_proxy_desc">演示如何开启云手机Pod网络代理仿真</string>
 </resources>

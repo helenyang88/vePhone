@@ -11,6 +11,7 @@ import androidx.annotation.Nullable;
 import androidx.appcompat.widget.LinearLayoutCompat;
 import androidx.appcompat.widget.SwitchCompat;
 
+import com.example.sdkdemo.AppSettings;
 import com.example.sdkdemo.R;
 import com.example.sdkdemo.base.BasePlayActivity;
 import com.example.sdkdemo.util.ScreenUtil;
@@ -113,33 +114,38 @@ public class SensorActivity extends BasePlayActivity {
     }
 
     private void initPlayConfigAndStartPlay() {
-        SdkUtil.PlayAuth auth = SdkUtil.getPlayAuth(this);
-        SdkUtil.checkPlayAuth(auth,
+        SdkUtil.checkPlayAuth(
+                SdkUtil.getPlayAuth(this),
                 p -> {
-                    PhonePlayConfig.Builder builder = new PhonePlayConfig.Builder();
-                    builder.userId(SdkUtil.getClientUid())
-                            .ak(auth.ak)
-                            .sk(auth.sk)
-                            .token(auth.token)
-                            .container(mContainer)
-                            .enableLocalKeyboard(true)
-                            .enableGyroscopeSensor(false)
-                            .enableGravitySensor(false)
-                            .enableAccSensor(false)
-                            .enableOrientationSensor(false)
-                            .enableMagneticSensor(false)
-                            .enableLocationService(true)
-                            .enableLightSensor(true)  // setLightSensorState作用相同
-                            .enableProximitySensor(false)  //setProximitySensorState作用相同
-                            .roundId(SdkUtil.getRoundId())
-                            .podId(auth.podId)
-                            .productId(auth.productId)
-                            .streamListener(this);
-                    VePhoneEngine.getInstance().start(builder.build(), this);
+                    VePhoneEngine.getInstance().start(buildPhonePlayConfig(p, mContainer), this);
                 },
                 p -> {
-                    showTipDialog(MessageFormat.format(getString(R.string.invalid_phone_play_config) , p));
+                    showTipDialog(MessageFormat.format(getString(R.string.invalid_phone_play_config), p));
                 });
+    }
+
+    @NonNull
+    @Override
+    protected PhonePlayConfig buildPhonePlayConfig(@NonNull SdkUtil.PlayAuth auth, @Nullable ViewGroup container) {
+        return new PhonePlayConfig.Builder().ak(auth.ak)
+                .sk(auth.sk)
+                .token(auth.token)
+                .container(container)
+                .podId(auth.podId)
+                .productId(auth.productId)
+                .enableLocalKeyboard(AppSettings.ENABLE_LOCAL_KEYBOARD)
+                .remoteWindowSize(AppSettings.ENABLE_FULL_SCREEN ? -1 : 0, AppSettings.ENABLE_FULL_SCREEN ? -1 : 0)
+                .streamListener(this)
+                // 各种传感器数据同步开关，默认都是关闭的，按需开启
+                .enableGyroscopeSensor(false)
+                .enableGravitySensor(false)
+                .enableAccSensor(false)
+                .enableOrientationSensor(false)
+                .enableMagneticSensor(false)
+                .enableLocationService(true)
+                .enableLightSensor(true)  // setLightSensorState作用相同
+                .enableProximitySensor(false)  //setProximitySensorState作用相同
+                .build();
     }
 
     @Override

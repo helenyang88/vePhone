@@ -20,7 +20,6 @@ import com.example.sdkdemo.base.BasePlayActivity;
 import com.example.sdkdemo.util.ScreenUtil;
 import com.example.sdkdemo.util.SdkUtil;
 import com.volcengine.cloudphone.apiservice.LocationService;
-import com.volcengine.phone.PhonePlayConfig;
 import com.volcengine.phone.VePhoneEngine;
 
 import java.text.MessageFormat;
@@ -130,22 +129,10 @@ public class LocationServiceActivity extends BasePlayActivity {
     }
 
     private void initPlayConfigAndStartPlay() {
-        SdkUtil.PlayAuth auth = SdkUtil.getPlayAuth(this);
-        SdkUtil.checkPlayAuth(auth,
+        SdkUtil.checkPlayAuth(
+                SdkUtil.getPlayAuth(this),
                 p -> {
-                    PhonePlayConfig.Builder builder = new PhonePlayConfig.Builder();
-                    builder.userId(SdkUtil.getClientUid())
-                            .ak(auth.ak)
-                            .sk(auth.sk)
-                            .token(auth.token)
-                            .container(mContainer)
-                            .enableLocalKeyboard(true)
-                            .enableLocationService(true)
-                            .roundId(SdkUtil.getRoundId())
-                            .podId(auth.podId)
-                            .productId(auth.productId)
-                            .streamListener(this);
-                    VePhoneEngine.getInstance().start(builder.build(), this);
+                    VePhoneEngine.getInstance().start(buildPhonePlayConfig(p, mContainer), this);
                 },
                 p -> {
                     showTipDialog(MessageFormat.format(getString(R.string.invalid_phone_play_config) , p));

@@ -24,7 +24,6 @@ import com.volcengine.cloudcore.common.mode.AudioPlaybackDevice;
 import com.volcengine.cloudcore.common.mode.LocalAudioStreamError;
 import com.volcengine.cloudcore.common.mode.LocalAudioStreamState;
 import com.volcengine.cloudphone.apiservice.AudioService;
-import com.volcengine.phone.PhonePlayConfig;
 import com.volcengine.phone.VePhoneEngine;
 
 import java.text.MessageFormat;
@@ -155,20 +154,10 @@ public class AudioServiceActivity extends BasePlayActivity {
     }
 
     private void initPlayConfigAndStartPlay() {
-        SdkUtil.PlayAuth auth = SdkUtil.getPlayAuth(this);
-        SdkUtil.checkPlayAuth(auth,
+        SdkUtil.checkPlayAuth(
+                SdkUtil.getPlayAuth(this),
                 p -> {
-                    PhonePlayConfig.Builder builder = new PhonePlayConfig.Builder();
-                    builder.userId(SdkUtil.getClientUid())
-                            .ak(auth.ak)
-                            .sk(auth.sk)
-                            .token(auth.token)
-                            .container(mContainer)
-                            .enableLocalKeyboard(true)
-                            .podId(auth.podId)
-                            .productId(auth.productId)
-                            .streamListener(this);
-                    VePhoneEngine.getInstance().start(builder.build(), this);
+                    VePhoneEngine.getInstance().start(buildPhonePlayConfig(p, mContainer), this);
                 },
                 p -> {
                     showTipDialog(MessageFormat.format(getString(R.string.invalid_phone_play_config) , p));
@@ -178,14 +167,16 @@ public class AudioServiceActivity extends BasePlayActivity {
     @Override
     protected void onResume() {
         super.onResume();
-        VePhoneEngine.getInstance().resume();
+        // 退后台后，退订视频保留音频
+        VePhoneEngine.getInstance().muteVideo(false);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
     }
 
     @Override
     protected void onPause() {
         super.onPause();
-        VePhoneEngine.getInstance().pause();
+        // 回前台后，重新订阅恢复视频
+        VePhoneEngine.getInstance().muteVideo(true);
         getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
     }
 

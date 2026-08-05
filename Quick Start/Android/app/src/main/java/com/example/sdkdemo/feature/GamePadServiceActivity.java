@@ -21,7 +21,6 @@ import com.volcengine.cloudplay.gamepad.api.ErrorCode;
 import com.volcengine.cloudplay.gamepad.api.OnGamePadStatusListener;
 import com.volcengine.cloudplay.gamepad.api.OnPhysicalDeviceListener;
 import com.volcengine.cloudplay.gamepad.api.VeGameConsole;
-import com.volcengine.phone.PhonePlayConfig;
 import com.volcengine.phone.VePhoneEngine;
 
 import java.text.MessageFormat;
@@ -80,21 +79,10 @@ public class GamePadServiceActivity extends BasePlayActivity {
     }
 
     private void initPlayConfigAndStartPlay() {
-        SdkUtil.PlayAuth auth = SdkUtil.getPlayAuth(this);
-        SdkUtil.checkPlayAuth(auth,
+        SdkUtil.checkPlayAuth(
+                SdkUtil.getPlayAuth(this),
                 p -> {
-                    PhonePlayConfig.Builder builder = new PhonePlayConfig.Builder();
-                    builder.userId(SdkUtil.getClientUid())
-                            .ak(auth.ak)
-                            .sk(auth.sk)
-                            .token(auth.token)
-                            .container(binding.container)
-                            .podId(auth.podId)
-                            .productId(auth.productId)
-                            .enableLocalKeyboard(true)
-                            .roundId(SdkUtil.getRoundId())
-                            .streamListener(this);
-                    VePhoneEngine.getInstance().start(builder.build(), this);
+                    VePhoneEngine.getInstance().start(buildPhonePlayConfig(p, binding.container), this);
                 },
                 p -> {
                     showTipDialog(MessageFormat.format(getString(R.string.invalid_phone_play_config) , p));
