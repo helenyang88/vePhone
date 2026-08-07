@@ -10,7 +10,7 @@ const PAGE_SIZE_OPTIONS = [
 
 export type PaginationControlsProps = {
   page: number;
-  pageSize: 10 | 20 | 50;
+  pageSize: number;
   total: number;
   onPageChange: (page: number) => void;
   onPageSizeChange: (pageSize: 10 | 20 | 50) => void;

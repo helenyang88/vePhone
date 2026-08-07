@@ -33,8 +33,11 @@ from mua_platform.test_plans.schemas import (
 from mua_platform.test_plans.service import (
     TagColorRegistryExhaustedError,
     TagColorService,
+    TestPlanCaseNotFoundError,
     TestPlanCasesNotFoundError,
+    TestPlanExecutionActiveError,
     TestPlanNameConflictError,
+    TestPlanRequiresOneCaseError,
     TestPlanService,
 )
 
@@ -219,6 +222,43 @@ def list_test_plan_cases(
         page=page,
         page_size=page_size,
     )
+
+
+@router.delete(
+    "/test-plans/{plan_id}/cases/{case_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def remove_test_plan_case(
+    plan_id: str,
+    case_id: str,
+    db: Database,
+    _user: CurrentUser,
+    _csrf_session: CsrfSession,
+) -> Response:
+    service = TestPlanService(db)
+    try:
+        removed = service.remove_case(plan_id, case_id)
+    except TestPlanCaseNotFoundError as exc:
+        raise api_error(
+            404,
+            "case_not_in_test_plan",
+            "Test case is not bound to this test plan",
+        ) from exc
+    except TestPlanRequiresOneCaseError as exc:
+        raise api_error(
+            409,
+            "test_plan_requires_one_case",
+            "Test plan must keep at least one test case",
+        ) from exc
+    except TestPlanExecutionActiveError as exc:
+        raise api_error(
+            409,
+            "test_plan_execution_active",
+            "Test plan has queued or running executions",
+        ) from exc
+    if not removed:
+        raise _not_found()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get(

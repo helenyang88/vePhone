@@ -413,6 +413,7 @@ def ensure_schema_migrations(engine: Engine) -> None:
             ("created_by", "ALTER TABLE test_cases ADD COLUMN created_by VARCHAR(100) DEFAULT 'system'"),
             ("created_at", "ALTER TABLE test_cases ADD COLUMN created_at DATETIME"),
             ("updated_at", "ALTER TABLE test_cases ADD COLUMN updated_at DATETIME"),
+            ("deleted_at", "ALTER TABLE test_cases ADD COLUMN deleted_at DATETIME"),
         ]
         with engine.begin() as connection:
             for col_name, ddl in alterations:

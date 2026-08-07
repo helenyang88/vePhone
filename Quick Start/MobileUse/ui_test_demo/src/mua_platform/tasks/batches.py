@@ -52,7 +52,10 @@ class TaskBatchService:
 
         cases = list(
             self.db.scalars(
-                select(TestCase).where(TestCase.id.in_(payload.case_ids))
+                select(TestCase).where(
+                    TestCase.id.in_(payload.case_ids),
+                    TestCase.deleted_at.is_(None),
+                )
             )
         )
         case_by_id = {case.id: case for case in cases}

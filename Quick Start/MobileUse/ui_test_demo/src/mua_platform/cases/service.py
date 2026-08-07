@@ -100,7 +100,12 @@ class CaseService:
             raise
 
     def get_case(self, case_id: str) -> TestCase | None:
-        return self.db.get(TestCase, case_id)
+        return self.db.scalar(
+            select(TestCase).where(
+                TestCase.id == case_id,
+                TestCase.deleted_at.is_(None),
+            )
+        )
 
     def case_response(self, case: TestCase) -> TestCaseResponse:
         return self.case_responses([case])[0]
@@ -111,6 +116,9 @@ class CaseService:
     ) -> list[TestCaseResponse]:
         if not cases:
             return []
+        from mua_platform.test_plans.models import TestPlan, TestPlanCase
+
+        case_ids = [case.id for case in cases]
         statistics = _case_statistics_subquery()
         statistics_by_case_id = {
             case_id: (
@@ -132,11 +140,22 @@ class CaseService:
                     statistics.c.pass_count,
                     statistics.c.fail_count,
                     statistics.c.last_executed_at,
-                ).where(
-                    statistics.c.case_id.in_(
-                        case.id for case in cases
-                    )
+                ).where(statistics.c.case_id.in_(case_ids))
+            )
+        }
+        bound_counts = {
+            case_id: count
+            for case_id, count in self.db.execute(
+                select(
+                    TestPlanCase.case_id,
+                    func.count(TestPlanCase.plan_id),
                 )
+                .join(TestPlan, TestPlan.id == TestPlanCase.plan_id)
+                .where(
+                    TestPlanCase.case_id.in_(case_ids),
+                    TestPlan.deleted_at.is_(None),
+                )
+                .group_by(TestPlanCase.case_id)
             )
         }
         responses = []
@@ -151,6 +170,7 @@ class CaseService:
                         "last_executed_at": (
                             _as_utc(values[3]) if values else None
                         ),
+                        "bound_plan_count": bound_counts.get(case.id, 0),
                     }
                 )
             )
@@ -161,7 +181,7 @@ class CaseService:
         case_id: str,
         created_by: str = "system",
     ) -> TestCase | None:
-        source = self.db.get(TestCase, case_id)
+        source = self.get_case(case_id)
         if source is None:
             return None
         copied = TestCase(
@@ -213,7 +233,9 @@ class CaseService:
 
         existing_titles = {
             title.casefold()
-            for title in self.db.scalars(select(TestCase.title)).all()
+            for title in self.db.scalars(
+                select(TestCase.title).where(TestCase.deleted_at.is_(None))
+            ).all()
             if isinstance(title, str)
         }
         items: list[CaseImportPreviewItem] = []
@@ -299,15 +321,23 @@ class CaseService:
             raise
 
     def stats(self) -> dict[str, int]:
-        total = self.db.scalar(select(func.count(TestCase.id))) or 0
+        active_cases = TestCase.deleted_at.is_(None)
+        total = self.db.scalar(
+            select(func.count(TestCase.id)).where(active_cases)
+        ) or 0
         auto_count = self.db.scalar(
             select(func.count(TestCase.id)).where(
+                active_cases,
                 TestCase.automation_level == "auto"
             )
         ) or 0
         today_start, tomorrow_start = _today_utc_bounds_for_shanghai()
         today_executions = self.db.scalar(
-            select(func.count(Task.id)).where(
+            select(func.count(Task.id)).join(
+                TestCase,
+                TestCase.id == Task.case_id,
+            ).where(
+                active_cases,
                 *_terminal_task_conditions(),
                 Task.finished_at >= today_start,
                 Task.finished_at < tomorrow_start,
@@ -319,7 +349,13 @@ class CaseService:
                 func.sum(
                     sql_case((Task.verdict == Verdict.PASS, 1), else_=0)
                 ),
-            ).where(*_terminal_task_conditions())
+            ).join(
+                TestCase,
+                TestCase.id == Task.case_id,
+            ).where(
+                active_cases,
+                *_terminal_task_conditions(),
+            )
         ).one()
         total_executions = total_executions or 0
         total_passes = total_passes or 0
@@ -347,6 +383,8 @@ class CaseService:
         automation_level: str | None = None,
         created_by: str | None = None,
     ) -> tuple[list[TestCaseResponse], int]:
+        from mua_platform.test_plans.models import TestPlan, TestPlanCase
+
         statistics = _case_statistics_subquery()
         query = (
             select(
@@ -358,9 +396,9 @@ class CaseService:
             )
             .outerjoin(statistics, statistics.c.case_id == TestCase.id)
         )
+        filters = [TestCase.deleted_at.is_(None)]
         count_query = select(func.count(TestCase.id))
 
-        filters = []
         if search:
             pattern = f"{search}%"
             filters.append(
@@ -396,11 +434,27 @@ class CaseService:
             count_query = count_query.where(*filters)
 
         total = self.db.scalar(count_query) or 0
-        rows = self.db.execute(
+        rows = list(self.db.execute(
             query.order_by(TestCase.updated_at.desc())
             .offset((page - 1) * page_size)
             .limit(page_size)
-        )
+        ))
+        page_case_ids = [case.id for case, *_rest in rows]
+        bound_counts = {
+            case_id: count
+            for case_id, count in self.db.execute(
+                select(
+                    TestPlanCase.case_id,
+                    func.count(TestPlanCase.plan_id),
+                )
+                .join(TestPlan, TestPlan.id == TestPlanCase.plan_id)
+                .where(
+                    TestPlanCase.case_id.in_(page_case_ids),
+                    TestPlan.deleted_at.is_(None),
+                )
+                .group_by(TestPlanCase.case_id)
+            )
+        } if page_case_ids else {}
         items = [
             TestCaseResponse.model_validate(case).model_copy(
                 update={
@@ -408,6 +462,7 @@ class CaseService:
                     "pass_count": pass_count or 0,
                     "fail_count": fail_count or 0,
                     "last_executed_at": _as_utc(last_executed_at),
+                    "bound_plan_count": bound_counts.get(case.id, 0),
                 }
             )
             for (
@@ -421,7 +476,7 @@ class CaseService:
         return items, total
 
     def update_case(self, case_id: str, payload: TestCaseUpdate) -> TestCase | None:
-        case = self.db.get(TestCase, case_id)
+        case = self.get_case(case_id)
         if case is None:
             return None
         data = payload.model_dump(exclude_unset=True)
@@ -439,7 +494,7 @@ class CaseService:
     def delete_case(self, case_id: str) -> bool:
         from mua_platform.test_plans.models import TestPlan, TestPlanCase
 
-        case = self.db.get(TestCase, case_id)
+        case = self.get_case(case_id)
         if case is None:
             return False
         if self.db.scalar(
@@ -452,16 +507,28 @@ class CaseService:
             .limit(1)
         ) is not None:
             raise ValueError("case_has_test_plans")
+        active_statuses = (
+            ExecutionStatus.SCRIPT_PENDING,
+            ExecutionStatus.QUEUED,
+            ExecutionStatus.RUNNING,
+        )
         if self.db.scalar(
-            select(Task.id).where(Task.case_id == case_id).limit(1)
+            select(Task.id)
+            .where(
+                Task.case_id == case_id,
+                Task.execution_status.in_(active_statuses),
+            )
+            .limit(1)
         ) is not None:
             raise ValueError("case_has_tasks")
-        self.db.delete(case)
+        case.deleted_at = datetime.now(UTC)
         self.db.commit()
         return True
 
     def list_tags(self) -> list[str]:
-        rows = self.db.scalars(select(TestCase.tags)).all()
+        rows = self.db.scalars(
+            select(TestCase.tags).where(TestCase.deleted_at.is_(None))
+        ).all()
         tag_set: set[str] = set()
         for tags in rows:
             if isinstance(tags, list):
@@ -470,7 +537,12 @@ class CaseService:
 
     def list_modules(self) -> list[str]:
         rows = self.db.scalars(
-            select(TestCase.module).where(TestCase.module.is_not(None)).distinct()
+            select(TestCase.module)
+            .where(
+                TestCase.deleted_at.is_(None),
+                TestCase.module.is_not(None),
+            )
+            .distinct()
         ).all()
         return sorted(r for r in rows if isinstance(r, str))
 

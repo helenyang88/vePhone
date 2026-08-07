@@ -9,21 +9,26 @@ import { expectCsrf, renderApp, server, user } from "./setup";
 const STYLES = readFileSync("web/styles.css", "utf8");
 
 function makeCase(overrides: Partial<TestCase>): TestCase {
-  return {
+  const item = {
     id: "case_alpha",
     title: "示例用例",
     module: "登录",
     content_markdown: "## 执行任务\n打开",
     tags: ["P0", "smoke"],
-    automation_level: "auto",
+    automation_level: "auto" as const,
     execution_count: 0,
     pass_count: 0,
     fail_count: 0,
     last_executed_at: null,
+    bound_plan_count: 0,
     created_by: "admin",
     created_at: "2026-07-28T03:00:00Z",
     updated_at: "2026-07-28T03:00:00Z",
     ...overrides,
+  };
+  return {
+    ...item,
+    bound_plan_count: item.bound_plan_count ?? 0,
   };
 }
 
@@ -112,6 +117,7 @@ it("filters by clicking a tag in the case row and drops the automation column", 
     "用例名称",
     "模块",
     "标签",
+    "关联计划",
     "执行次数",
     "通过率",
     "最近执行",
@@ -290,8 +296,32 @@ it("shows execution count and pass rate in separate columns", async () => {
 
   const row = (await screen.findByText("case_rate")).closest("tr") as HTMLElement;
   const cells = within(row).getAllByRole("cell");
-  expect(cells[4]).toHaveTextContent("4");
-  expect(cells[5]).toHaveTextContent("75%");
+  expect(cells[5]).toHaveTextContent("4");
+  expect(cells[6]).toHaveTextContent("75%");
+});
+
+it("shows bound test plan count in the case list", async () => {
+  server.use(
+    http.get("/api/v1/cases", () =>
+      HttpResponse.json(listOf([
+        makeCase({ id: "case_bound", title: "有关联计划", bound_plan_count: 3 }),
+        makeCase({ id: "case_unbound", title: "无关联计划", bound_plan_count: 0 }),
+      ])),
+    ),
+    http.get("/api/v1/cases/tags", () => HttpResponse.json({ items: ["P0"] })),
+    http.get("/api/v1/cases/modules", () => HttpResponse.json({ items: ["登录"] })),
+  );
+
+  renderApp("/cases");
+
+  const boundRow = (await screen.findByRole("link", { name: "有关联计划" }))
+    .closest("tr") as HTMLElement;
+  const unboundRow = screen.getByRole("link", { name: "无关联计划" })
+    .closest("tr") as HTMLElement;
+
+  expect(screen.getByRole("columnheader", { name: "关联计划" })).toBeVisible();
+  expect(within(boundRow).getAllByRole("cell")[4]).toHaveTextContent("3");
+  expect(within(unboundRow).getAllByRole("cell")[4]).toHaveTextContent("-");
 });
 
 it("copies a case and refreshes the list", async () => {
@@ -346,6 +376,173 @@ it("confirms deletion before removing a case", async () => {
 
   await waitFor(() => expect(deleteRequests).toBe(1));
   await waitFor(() => expect(screen.queryByText("case_delete")).not.toBeInTheDocument());
+});
+
+it("supports bulk action bar, export and delete confirmation", async () => {
+  let items = [
+    makeCase({ id: "case_bulk_a", title: "批量用例 A", tags: ["P0"] }),
+    makeCase({ id: "case_bulk_b", title: "批量用例 B", tags: ["smoke"] }),
+    makeCase({ id: "case_bulk_c", title: "批量用例 C", tags: ["reg"] }),
+  ];
+  const createObjectURL = vi.fn(() => "blob:case-export");
+  const revokeObjectURL = vi.fn();
+  const clickAnchor = vi
+    .spyOn(HTMLAnchorElement.prototype, "click")
+    .mockImplementation(() => undefined);
+  Object.defineProperty(URL, "createObjectURL", {
+    value: createObjectURL,
+    configurable: true,
+  });
+  Object.defineProperty(URL, "revokeObjectURL", {
+    value: revokeObjectURL,
+    configurable: true,
+  });
+  let deleteRequests = 0;
+  server.use(
+    http.get("/api/v1/cases", () => HttpResponse.json(listOf(items))),
+    http.get("/api/v1/cases/tags", () => HttpResponse.json({ items: ["P0", "smoke", "reg"] })),
+    http.get("/api/v1/cases/modules", () => HttpResponse.json({ items: ["登录"] })),
+    http.post("/api/v1/cases/batch-delete", async ({ request }) => {
+      expectCsrf(request);
+      deleteRequests += 1;
+      const payload = await request.json() as { case_ids: string[] };
+      items = items.filter((item) => !payload.case_ids.includes(item.id));
+      return HttpResponse.json({
+        deleted_count: payload.case_ids.length,
+        failed_count: 0,
+        items: payload.case_ids.map((caseId) => ({
+          case_id: caseId,
+          status: "deleted",
+          code: null,
+          message: null,
+        })),
+      });
+    }),
+  );
+
+  renderApp("/cases");
+
+  await screen.findByRole("link", { name: "批量用例 A" });
+  expect(screen.queryByText("已选择 2 个用例")).not.toBeInTheDocument();
+
+  await user.click(screen.getByRole("checkbox", { name: /批量用例 A/ }));
+  await user.click(screen.getByRole("checkbox", { name: /批量用例 B/ }));
+
+  expect(screen.getByText("已选择 2 个用例")).toBeVisible();
+  expect(screen.getByRole("button", { name: "批量执行" })).toBeVisible();
+  expect(screen.getByRole("button", { name: "批量导出" })).toBeVisible();
+  expect(screen.getByRole("button", { name: "批量删除" })).toBeVisible();
+
+  await user.click(screen.getByRole("button", { name: "批量导出" }));
+  expect(createObjectURL).toHaveBeenCalled();
+  expect(clickAnchor).toHaveBeenCalled();
+
+  await user.click(screen.getByRole("button", { name: "批量删除" }));
+  expect(screen.getByRole("dialog", { name: "批量删除用例" })).toBeVisible();
+  expect(screen.getByText("将尝试删除已选择的 2 个用例。")).toBeVisible();
+  expect(screen.getByText(/排队中、运行中或正在生成脚本/)).toBeVisible();
+  expect(screen.getByText(/删除后用例将从用例库和测试计划候选列表中隐藏/)).toBeVisible();
+  expect(deleteRequests).toBe(0);
+  await user.click(screen.getByRole("button", { name: "确认删除" }));
+
+  await waitFor(() => expect(deleteRequests).toBe(1));
+  await waitFor(() => expect(screen.queryByText("case_bulk_a")).not.toBeInTheDocument());
+});
+
+it("keeps bulk delete failures inside the confirmation dialog", async () => {
+  const items = [
+    makeCase({ id: "case_bulk_blocked", title: "批量删除失败用例", tags: ["P0"] }),
+  ];
+  server.use(
+    http.get("/api/v1/cases", () => HttpResponse.json(listOf(items))),
+    http.get("/api/v1/cases/tags", () => HttpResponse.json({ items: ["P0"] })),
+    http.get("/api/v1/cases/modules", () => HttpResponse.json({ items: ["登录"] })),
+    http.post("/api/v1/cases/batch-delete", async ({ request }) => {
+      expectCsrf(request);
+      return HttpResponse.json({
+        deleted_count: 0,
+        failed_count: 1,
+        items: [{
+          case_id: "case_bulk_blocked",
+          status: "failed",
+          code: "case_has_test_plans",
+          message: "Test case is bound to an active test plan",
+        }],
+      });
+    }),
+  );
+
+  renderApp("/cases");
+
+  await screen.findByRole("link", { name: "批量删除失败用例" });
+  await user.click(screen.getByRole("checkbox", { name: /批量删除失败用例/ }));
+  await user.click(screen.getByRole("button", { name: "批量删除" }));
+  await user.click(screen.getByRole("button", { name: "确认删除" }));
+
+  const dialog = await screen.findByRole("dialog", { name: "批量删除用例" });
+  expect(within(dialog).getByRole("alert")).toHaveTextContent(
+    "部分用例删除失败：case_bulk_blocked: 已绑定测试计划",
+  );
+  expect(screen.queryByText("已删除 0 个用例，1 个删除失败。")).not.toBeInTheDocument();
+  expect(screen.queryByText((content, element) =>
+    element?.classList.contains("error-banner") === true
+      && content.includes("部分用例删除失败"),
+  )).not.toBeInTheDocument();
+});
+
+it("creates a task batch from selected cases", async () => {
+  const items = [
+    makeCase({ id: "case_batch_a", title: "批量执行 A" }),
+    makeCase({ id: "case_batch_b", title: "批量执行 B" }),
+  ];
+  let batchPayload: unknown = null;
+  server.use(
+    http.get("/api/v1/cases", () => HttpResponse.json(listOf(items))),
+    http.get("/api/v1/cases/tags", () => HttpResponse.json({ items: ["P0"] })),
+    http.get("/api/v1/cases/modules", () => HttpResponse.json({ items: ["登录"] })),
+    http.post("/api/v1/pod-pool/refresh", ({ request }) => {
+      expectCsrf(request);
+      return HttpResponse.json({ items: [] });
+    }),
+    http.post("/api/v1/task-batches", async ({ request }) => {
+      expectCsrf(request);
+      batchPayload = await request.json();
+      return HttpResponse.json({
+        id: "batch_bulk",
+        name: "批量执行 2 个用例",
+        test_type: "regression",
+        selection_mode: "multi_cases",
+        selection_snapshot: { case_ids: ["case_batch_a", "case_batch_b"] },
+        device_strategy: "automatic",
+        pod_ids: [],
+        concurrency: 2,
+        device_wait_timeout_seconds: 300,
+        execution_status: "queued",
+        verdict: null,
+        created_by: "admin",
+        unavailable_since: null,
+        cancel_requested_at: null,
+        created_at: "2026-08-07T00:00:00Z",
+        started_at: null,
+        finished_at: null,
+        tasks: [],
+      });
+    }),
+  );
+
+  renderApp("/cases");
+
+  await screen.findByRole("link", { name: "批量执行 A" });
+  await user.click(screen.getByRole("checkbox", { name: /批量执行 A/ }));
+  await user.click(screen.getByRole("checkbox", { name: /批量执行 B/ }));
+  await user.click(screen.getByRole("button", { name: "批量执行" }));
+  await user.click(screen.getByRole("button", { name: "开始执行" }));
+
+  await waitFor(() => expect(batchPayload).toMatchObject({
+    selection_mode: "multi_cases",
+    case_ids: ["case_batch_a", "case_batch_b"],
+    concurrency: 2,
+  }));
 });
 
 it("restores case filters and pagination from the URL", async () => {

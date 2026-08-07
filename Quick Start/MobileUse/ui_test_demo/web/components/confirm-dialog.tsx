@@ -1,10 +1,12 @@
 import { useEffect, useId, useRef } from "react";
+import type { ReactNode } from "react";
 import { createPortal } from "react-dom";
 
 export function ConfirmDialog({
   open,
   title,
   description,
+  children,
   confirmLabel,
   pendingLabel,
   isPending = false,
@@ -15,6 +17,7 @@ export function ConfirmDialog({
   open: boolean;
   title: string;
   description: string;
+  children?: ReactNode;
   confirmLabel: string;
   pendingLabel: string;
   isPending?: boolean;
@@ -98,9 +101,12 @@ export function ConfirmDialog({
           <h3 id={titleId}>{title}</h3>
         </div>
         <div className="modal-body">
-          <p id={descriptionId} className="confirm-dialog-description">
-            {description}
-          </p>
+          {description && (
+            <p id={descriptionId} className="confirm-dialog-description">
+              {description}
+            </p>
+          )}
+          {children}
           {errorMessage && (
             <p className="form-error confirm-dialog-error" role="alert">
               {errorMessage}

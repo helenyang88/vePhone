@@ -159,6 +159,7 @@ class PlanReportTask(BaseModel):
     task_id: str
     case_id: str
     case_title: str
+    case_deleted: bool = False
     execution_status: ReportTaskExecutionStatus
     verdict: ReportTaskVerdict | None
     failure_type: str | None

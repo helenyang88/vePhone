@@ -37,6 +37,7 @@ class TestCaseResponse(BaseModel):
     pass_count: int
     fail_count: int
     last_executed_at: datetime | None
+    bound_plan_count: int = 0
     created_by: str
     created_at: datetime
     updated_at: datetime
@@ -66,6 +67,40 @@ class CaseExecuteRequest(BaseModel):
         pattern="^(global|custom|case_default)$",
     )
     agent_options: AgentRuntimeOptions | None = None
+
+
+class CaseBatchDeleteRequest(BaseModel):
+    case_ids: list[str] = Field(min_length=1, max_length=100)
+
+
+class CaseBatchDeleteItem(BaseModel):
+    case_id: str
+    status: str
+    code: str | None = None
+    message: str | None = None
+
+
+class CaseBatchDeleteResponse(BaseModel):
+    deleted_count: int
+    failed_count: int
+    items: list[CaseBatchDeleteItem]
+
+
+class CaseBoundTestPlanItem(BaseModel):
+    id: str
+    name: str
+    test_type: str
+    case_count: int
+    has_active_execution: bool
+    created_by: str
+    updated_at: datetime
+
+
+class CaseBoundTestPlanListResponse(BaseModel):
+    items: list[CaseBoundTestPlanItem]
+    total: int
+    page: int
+    page_size: int
 
 
 class CaseImportPreviewRequest(BaseModel):

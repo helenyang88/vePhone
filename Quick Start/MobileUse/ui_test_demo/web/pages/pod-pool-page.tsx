@@ -593,7 +593,7 @@ export function PodPoolPage() {
             </section>
           ) : (
             <>
-              <div className={`table-card${openColumnFilter ? " filter-open" : ""}`}>
+              <div className={`table-card device-table-card${openColumnFilter ? " filter-open" : ""}`}>
                 <div className="table-wrap">
                   <table className="devices-table">
                     <thead>

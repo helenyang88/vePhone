@@ -4,10 +4,13 @@ import { useEffect, useMemo, useState } from "react";
 
 import { ApiError, api } from "../api/client";
 import type {
+  CaseBatchDeleteResponse,
   CaseStats,
   ModuleListResponse,
   TagListResponse,
   Task,
+  TaskBatch,
+  TaskBatchCreateRequest,
   TestCase,
   TestCaseListResponse,
 } from "../api/types";
@@ -18,6 +21,7 @@ import { MetricCard } from "../components/metric-card";
 import { PageHeader } from "../components/page-header";
 import { PaginationControls } from "../components/pagination-controls";
 import { SingleSelect } from "../components/single-select";
+import { tagToneClass } from "../utils/tag-tone";
 import { formatChinaDate, formatChinaDateTime, parseTimestampMs } from "../utils/time";
 
 const PAGE_SIZE = 10;
@@ -45,14 +49,6 @@ function passRate(c: TestCase): number {
 function initialPage(params: URLSearchParams): number {
   const value = Number(params.get("page") ?? "1");
   return Number.isInteger(value) && value > 0 ? value : 1;
-}
-
-function tagToneClass(tag: string): string {
-  let hash = 7;
-  for (const char of tag) {
-    hash = (hash * 33 + char.charCodeAt(0)) >>> 0;
-  }
-  return `tag-tone-${hash % 5}`;
 }
 
 function SearchIcon() {
@@ -166,8 +162,12 @@ export function CasesPage() {
   const [execDialogOpen, setExecDialogOpen] = useState(false);
   const [execCase, setExecCase] = useState<TestCase | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<TestCase | null>(null);
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [bulkExecuteOpen, setBulkExecuteOpen] = useState(false);
+  const [selectedCaseIds, setSelectedCaseIds] = useState<string[]>([]);
   const [actionMessage, setActionMessage] = useState("");
   const [actionError, setActionError] = useState("");
+  const [deleteDialogError, setDeleteDialogError] = useState("");
 
   const queryParams = useMemo(() => {
     const params = new URLSearchParams();
@@ -221,6 +221,7 @@ export function CasesPage() {
     onMutate: () => {
       setActionError("");
       setActionMessage("");
+      setDeleteDialogError("");
     },
     onSuccess: () => {
       setDeleteTarget(null);
@@ -231,7 +232,7 @@ export function CasesPage() {
       void queryClient.invalidateQueries({ queryKey: ["case-modules"] });
     },
     onError: (error) => {
-      setActionError(
+      setDeleteDialogError(
         error instanceof ApiError && error.code === "case_has_tasks"
           ? "该用例已有执行记录，为保留任务历史暂不能删除。"
           : error instanceof ApiError
@@ -280,6 +281,71 @@ export function CasesPage() {
       navigate(`/tasks/${data.id}`);
     },
   });
+  const executeBatch = useMutation({
+    mutationFn: (payload: TaskBatchCreateRequest) =>
+      api.post<TaskBatch>("/task-batches", payload),
+    onMutate: () => {
+      setActionError("");
+      setActionMessage("");
+    },
+    onSuccess: (batch) => {
+      setBulkExecuteOpen(false);
+      setSelectedCaseIds([]);
+      setActionMessage(`已创建批量执行任务 ${batch.id}。`);
+      void queryClient.invalidateQueries({ queryKey: ["cases"] });
+      void queryClient.invalidateQueries({ queryKey: ["pod-pool"] });
+      navigate("/tasks");
+    },
+    onError: (error) => {
+      setActionError(
+        error instanceof ApiError
+          ? `${error.message}，请检查执行配置后重试。`
+          : "批量执行失败，请检查执行配置后重试。",
+      );
+    },
+  });
+  const deleteCases = useMutation({
+    mutationFn: (caseIds: string[]) =>
+      api.post<CaseBatchDeleteResponse>("/cases/batch-delete", { case_ids: caseIds }),
+    onMutate: () => {
+      setActionError("");
+      setActionMessage("");
+      setDeleteDialogError("");
+    },
+    onSuccess: (result) => {
+      if (result.failed_count > 0) {
+        const failed = result.items
+          .filter((item) => item.status === "failed")
+          .slice(0, 3)
+          .map((item) => `${item.case_id}: ${caseDeleteMessage(item.code)}`)
+          .join("；");
+        setDeleteDialogError(`部分用例删除失败：${failed}`);
+        setSelectedCaseIds(
+          result.items
+            .filter((item) => item.status === "failed")
+            .map((item) => item.case_id),
+        );
+        setActionMessage(
+          result.deleted_count > 0 ? `已删除 ${result.deleted_count} 个用例。` : "",
+        );
+      } else {
+        setBulkDeleteOpen(false);
+        setSelectedCaseIds([]);
+        setActionMessage(`已删除 ${result.deleted_count} 个用例。`);
+      }
+      void queryClient.invalidateQueries({ queryKey: ["cases"] });
+      void queryClient.invalidateQueries({ queryKey: ["case-stats"] });
+      void queryClient.invalidateQueries({ queryKey: ["case-tags"] });
+      void queryClient.invalidateQueries({ queryKey: ["case-modules"] });
+    },
+    onError: (error) => {
+      setDeleteDialogError(
+        error instanceof ApiError
+          ? `${error.message}，请稍后重试。`
+          : "批量删除失败，请稍后重试。",
+      );
+    },
+  });
 
   const totalItems = casesQuery.data?.total ?? 0;
   const items = casesQuery.data?.items ?? [];
@@ -291,6 +357,12 @@ export function CasesPage() {
     pass_rate: 0,
   };
   const hasFilter = Boolean(search || moduleFilter || tagFilter);
+  const selectedCases = selectedCaseIds
+    .map((caseId) => items.find((item) => item.id === caseId))
+    .filter((item): item is TestCase => Boolean(item));
+  const selectedCount = selectedCaseIds.length;
+  const allPageSelected = items.length > 0
+    && items.every((item) => selectedCaseIds.includes(item.id));
   const moduleOptions = useMemo(
     () => [
       { value: "", label: "全部模块" },
@@ -320,10 +392,83 @@ export function CasesPage() {
     return () => window.clearTimeout(timer);
   }, [searchInput]);
 
+  useEffect(() => {
+    setSelectedCaseIds((current) => {
+      const next = current.filter((caseId) =>
+        items.some((item) => item.id === caseId),
+      );
+      return next.length === current.length ? current : next;
+    });
+  }, [items]);
+
   function handleFilterChange(type: "module" | "tag", value: string) {
     setPage(1);
     if (type === "module") setModuleFilter(value);
     if (type === "tag") setTagFilter(value);
+  }
+
+  function toggleCaseSelection(caseId: string) {
+    setSelectedCaseIds((current) =>
+      current.includes(caseId)
+        ? current.filter((item) => item !== caseId)
+        : [...current, caseId],
+    );
+  }
+
+  function togglePageSelection() {
+    setSelectedCaseIds((current) => {
+      if (allPageSelected) {
+        return current.filter((caseId) => !items.some((item) => item.id === caseId));
+      }
+      const next = new Set(current);
+      items.forEach((item) => next.add(item.id));
+      return [...next];
+    });
+  }
+
+  function exportSelectedCases() {
+    const rows = selectedCases.map((item) => ({
+      title: item.title,
+      module: item.module ?? "",
+      tags: item.tags.join("|"),
+      content_markdown: item.content_markdown,
+    }));
+    const csv = [
+      ["title", "module", "tags", "content_markdown"],
+      ...rows.map((row) => [
+        row.title,
+        row.module,
+        row.tags,
+        row.content_markdown,
+      ]),
+    ].map((row) => row.map(csvEscape).join(",")).join("\n");
+    downloadText(
+      `mua-cases-${new Date().toISOString().slice(0, 10)}.csv`,
+      csv,
+      "text/csv;charset=utf-8",
+    );
+    setActionMessage(`已导出 ${selectedCases.length} 个用例。`);
+  }
+
+  function executeSelectedCases(config: ExecuteConfig) {
+    if (selectedCaseIds.length === 1) {
+      executeCase.mutate({ caseId: selectedCaseIds[0], config });
+      return;
+    }
+    executeBatch.mutate({
+      name: `批量执行 ${selectedCaseIds.length} 个用例`,
+      test_type: "regression",
+      selection_mode: "multi_cases",
+      case_ids: selectedCaseIds,
+      selection_snapshot: { case_ids: selectedCaseIds },
+      device_strategy: config.pod_id ? "specified" : "automatic",
+      pod_ids: config.pod_id ? [config.pod_id] : [],
+      concurrency: Math.min(selectedCaseIds.length, Math.max(1, selectedCaseIds.length)),
+      timeout_seconds: config.timeout_seconds,
+      agent_config_mode: config.agent_config_mode,
+      agent_options: config.agent_options,
+      idempotency_key: `batch_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    });
   }
 
   return (
@@ -434,6 +579,45 @@ export function CasesPage() {
           </div>
         </div>
 
+        {selectedCount > 0 && (
+          <div className="case-bulk-action-bar" aria-live="polite">
+            <strong>已选择 {selectedCount} 个用例</strong>
+            <span>仅对当前已勾选用例生效</span>
+            <div className="case-bulk-action-spacer" />
+            <button
+              type="button"
+              className="case-bulk-action-button"
+              onClick={() => setSelectedCaseIds([])}
+            >
+              清空选择
+            </button>
+            <button
+              type="button"
+              className="case-bulk-action-button run"
+              onClick={() => setBulkExecuteOpen(true)}
+            >
+              批量执行
+            </button>
+            <button
+              type="button"
+              className="case-bulk-action-button export"
+              onClick={exportSelectedCases}
+            >
+              批量导出
+            </button>
+            <button
+              type="button"
+              className="case-bulk-action-button danger"
+              onClick={() => {
+                setDeleteDialogError("");
+                setBulkDeleteOpen(true);
+              }}
+            >
+              批量删除
+            </button>
+          </div>
+        )}
+
         <div className="table-card">
           {casesQuery.isLoading ? (
             <div className="empty-state">加载中…</div>
@@ -460,10 +644,21 @@ export function CasesPage() {
               <table className="data-table task-table cases-table">
                 <thead>
                   <tr>
-                    <th className="sticky-col case-sticky-header" style={{ minWidth: 280 }}>用例ID</th>
+                    <th className="sticky-col case-sticky-header" style={{ minWidth: 310 }} aria-label="用例ID">
+                      <label className="case-select-all">
+                        <input
+                          type="checkbox"
+                          aria-label={allPageSelected ? "取消选择当前页用例" : "选择当前页用例"}
+                          checked={allPageSelected}
+                          onChange={togglePageSelection}
+                        />
+                        <span>用例ID</span>
+                      </label>
+                    </th>
                     <th style={{ minWidth: 200 }}>用例名称</th>
                     <th style={{ width: 100 }}>模块</th>
                     <th style={{ minWidth: 160 }}>标签</th>
+                    <th style={{ width: 90 }}>关联计划</th>
                     <th style={{ width: 80 }}>执行次数</th>
                     <th style={{ width: 80 }}>通过率</th>
                     <th style={{ width: 130 }}>最近执行</th>
@@ -475,19 +670,28 @@ export function CasesPage() {
                 <tbody>
                   {items.map((c) => {
                     const rate = passRate(c);
+                    const boundPlanCount = c.bound_plan_count ?? 0;
                     return (
                       <tr key={c.id}>
                         <td className="sticky-col">
-                          <div className="cell-id-copy">
-                            <span
-                              className="monospace cell-id-full"
-                              translate="no"
-                              style={{ fontSize: "0.75rem", color: "var(--mua-neutral-500)" }}
-                              title={c.id}
-                            >
-                              {c.id}
-                            </span>
-                            <CopyButton value={c.id} label="用例ID" />
+                          <div className="case-select-id-cell">
+                            <input
+                              type="checkbox"
+                              aria-label={`选择用例 ${c.title} ${c.id}`}
+                              checked={selectedCaseIds.includes(c.id)}
+                              onChange={() => toggleCaseSelection(c.id)}
+                            />
+                            <div className="cell-id-copy">
+                              <span
+                                className="monospace cell-id-full"
+                                translate="no"
+                                style={{ fontSize: "0.75rem", color: "var(--mua-neutral-500)" }}
+                                title={c.id}
+                              >
+                                {c.id}
+                              </span>
+                              <CopyButton value={c.id} label="用例ID" />
+                            </div>
                           </div>
                         </td>
                         <td>
@@ -518,6 +722,9 @@ export function CasesPage() {
                             )}
                             {c.tags.length === 0 && <span style={{ color: "var(--mua-neutral-400)", fontSize: "0.8rem" }}>—</span>}
                           </div>
+                        </td>
+                        <td className="case-number-cell">
+                          {boundPlanCount > 0 ? boundPlanCount : "-"}
                         </td>
                         <td className="case-number-cell">
                           {c.execution_count}
@@ -625,21 +832,84 @@ export function CasesPage() {
               : ""
         }
       />
+      <ExecuteDialog
+        open={bulkExecuteOpen}
+        caseTitle={`${selectedCount} 个用例`}
+        onClose={() => setBulkExecuteOpen(false)}
+        onConfirm={executeSelectedCases}
+        isPending={executeBatch.isPending || executeCase.isPending}
+        allowCaseDefault={false}
+        errorMessage={actionError}
+      />
       <ConfirmDialog
         open={deleteTarget !== null}
         title="删除用例"
         description={deleteTarget
-          ? `确定删除「${deleteTarget.title}」吗？删除后无法恢复。`
+          ? `确定删除「${deleteTarget.title}」吗？删除后将从用例库和测试计划候选列表中隐藏，历史执行记录仍保留。`
           : ""}
         confirmLabel="确认删除"
         pendingLabel="删除中…"
         isPending={deleteCase.isPending}
-        errorMessage={deleteCase.isError ? actionError : ""}
-        onClose={() => setDeleteTarget(null)}
+        errorMessage={deleteDialogError}
+        onClose={() => {
+          setDeleteTarget(null);
+          setDeleteDialogError("");
+        }}
         onConfirm={() => {
           if (deleteTarget) deleteCase.mutate(deleteTarget.id);
         }}
       />
+      <ConfirmDialog
+        open={bulkDeleteOpen}
+        title="批量删除用例"
+        description={`将尝试删除已选择的 ${selectedCount} 个用例。`}
+        confirmLabel="确认删除"
+        pendingLabel="删除中…"
+        isPending={deleteCases.isPending}
+        errorMessage={deleteDialogError}
+        onClose={() => {
+          setBulkDeleteOpen(false);
+          setDeleteDialogError("");
+        }}
+        onConfirm={() => deleteCases.mutate(selectedCaseIds)}
+      >
+        <div className="case-delete-policy-card">
+          <div className="case-delete-policy-icon" aria-hidden="true">!</div>
+          <div>
+            <strong>删除前会自动校验用例状态</strong>
+            <p>
+              仍绑定有效测试计划，或存在排队中、运行中或正在生成脚本任务的用例不会被删除。
+            </p>
+          </div>
+        </div>
+        <ul className="case-delete-policy-list">
+          <li>已有完成、失败、中断或取消记录的用例允许软删除，历史执行记录仍保留。</li>
+          <li>删除后用例将从用例库和测试计划候选列表中隐藏，不能再被新任务引用。</li>
+        </ul>
+      </ConfirmDialog>
     </div>
   );
+}
+
+function csvEscape(value: string): string {
+  return `"${value.replace(/"/g, '""')}"`;
+}
+
+function downloadText(filename: string, content: string, type: string) {
+  const blob = new Blob([content], { type });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+}
+
+function caseDeleteMessage(code: string | null): string {
+  if (code === "case_has_tasks") return "存在排队中或运行中的任务";
+  if (code === "case_has_test_plans") return "已绑定测试计划";
+  if (code === "case_not_found") return "用例不存在";
+  return "删除失败";
 }

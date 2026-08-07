@@ -356,6 +356,23 @@ describe("设备池页面", () => {
     );
   });
 
+  it("设备池列表使用更高的内部滚动区", async () => {
+    server.use(
+      http.get("/api/v1/pod-pool", () => HttpResponse.json(initialPool)),
+    );
+
+    renderApp("/pods");
+
+    const table = await screen.findByRole("table");
+    expect(table.closest(".device-table-card")).not.toBeNull();
+    expect(STYLES).toMatch(
+      /\.device-table-card\s*\{[^}]*display:\s*flex;[^}]*flex-direction:\s*column;[^}]*min-height:\s*min\(640px, calc\(100vh - 300px\)\);/,
+    );
+    expect(STYLES).toMatch(
+      /\.device-table-card\s+\.table-wrap\s*\{[^}]*flex:\s*1;[^}]*min-height:\s*520px;[^}]*overflow:\s*auto;/,
+    );
+  });
+
   it("筛选无结果时保留列头并支持重新选择筛选值", async () => {
     server.use(
       http.get("/api/v1/pod-pool", () => HttpResponse.json(initialPool)),

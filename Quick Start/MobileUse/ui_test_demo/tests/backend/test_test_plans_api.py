@@ -775,6 +775,25 @@ def test_plan_write_rejects_missing_cases_without_partial_update(
     assert tags["total"] == 0
 
 
+def test_create_plan_rejects_soft_deleted_case(authenticated_client):
+    case_id = _create_case(authenticated_client, "已软删除候选用例")
+    with authenticated_client.app.state.session_factory() as db:
+        case = db.get(CaseModel, case_id)
+        assert case is not None
+        case.deleted_at = datetime.now(UTC)
+        db.commit()
+
+    response = _create_plan_response(
+        authenticated_client,
+        "不能引用软删除用例",
+        case_ids=[case_id],
+    )
+
+    assert response.status_code == 404
+    assert response.json()["error"]["code"] == "test_plan_cases_not_found"
+    assert response.json()["error"]["details"]["case_ids"] == [case_id]
+
+
 def test_soft_delete_preserves_execution_snapshot(authenticated_client):
     case_id = _create_case(authenticated_client, "快照用例")
     plan = _create_plan(
@@ -891,6 +910,103 @@ def test_delete_case_bound_to_active_plan_returns_stable_conflict(
         authenticated_client.delete(f"/api/v1/cases/{case_id}").status_code
         == 204
     )
+
+
+def test_case_bound_plans_and_remove_case_update_plan_count(authenticated_client):
+    case_id = _create_case(authenticated_client, "待解除绑定用例")
+    other_id = _create_case(authenticated_client, "保留绑定用例")
+    plan = _create_plan(
+        authenticated_client,
+        "解除绑定计划",
+        case_ids=[case_id, other_id],
+    )
+
+    bound = authenticated_client.get(f"/api/v1/cases/{case_id}/test-plans")
+    removed = authenticated_client.delete(
+        f"/api/v1/test-plans/{plan['id']}/cases/{case_id}"
+    )
+    rebound = authenticated_client.get(f"/api/v1/cases/{case_id}/test-plans")
+    detail = authenticated_client.get(f"/api/v1/test-plans/{plan['id']}")
+
+    assert bound.status_code == 200
+    assert bound.json()["total"] == 1
+    assert bound.json()["items"][0]["id"] == plan["id"]
+    assert bound.json()["items"][0]["case_count"] == 2
+    assert removed.status_code == 204
+    assert rebound.status_code == 200
+    assert rebound.json()["total"] == 0
+    assert detail.json()["case_count"] == 1
+    assert detail.json()["case_ids"] == [other_id]
+
+
+def test_case_bound_plans_are_paginated(authenticated_client):
+    case_id = _create_case(authenticated_client, "分页绑定用例")
+    [
+        _create_plan(
+            authenticated_client,
+            f"分页绑定计划 {index}",
+            case_ids=[case_id],
+        )["id"]
+        for index in range(7)
+    ]
+
+    response = authenticated_client.get(
+        f"/api/v1/cases/{case_id}/test-plans",
+        params={"page": 2, "page_size": 5},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total"] == 7
+    assert body["page"] == 2
+    assert body["page_size"] == 5
+    assert len(body["items"]) == 2
+
+
+def test_remove_case_from_plan_rejects_active_execution(authenticated_client):
+    case_id = _create_case(authenticated_client, "执行中禁止移除")
+    other_id = _create_case(authenticated_client, "执行中保留用例")
+    plan = _create_plan(
+        authenticated_client,
+        "执行中计划",
+        case_ids=[case_id, other_id],
+    )
+    execution_id = _seed_execution(
+        authenticated_client,
+        plan,
+        [Verdict.PASS, Verdict.PASS],
+        created_at=datetime(2026, 1, 1, tzinfo=UTC),
+    )
+    with authenticated_client.app.state.session_factory() as db:
+        execution = db.get(PlanExecution, execution_id)
+        assert execution is not None
+        batch = db.get(TaskBatch, execution.task_batch_id)
+        assert batch is not None
+        batch.execution_status = ExecutionStatus.RUNNING
+        db.commit()
+
+    response = authenticated_client.delete(
+        f"/api/v1/test-plans/{plan['id']}/cases/{case_id}"
+    )
+
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == "test_plan_execution_active"
+
+
+def test_remove_case_from_plan_rejects_last_case(authenticated_client):
+    case_id = _create_case(authenticated_client, "最后一个用例")
+    plan = _create_plan(
+        authenticated_client,
+        "单用例计划",
+        case_ids=[case_id],
+    )
+
+    response = authenticated_client.delete(
+        f"/api/v1/test-plans/{plan['id']}/cases/{case_id}"
+    )
+
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == "test_plan_requires_one_case"
 
 
 def test_unknown_plan_routes_return_stable_not_found(authenticated_client):

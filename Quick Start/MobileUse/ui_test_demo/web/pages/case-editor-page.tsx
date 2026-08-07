@@ -3,8 +3,17 @@ import { Link, useLocation, useNavigate, useParams } from "react-router";
 import { useEffect, useState } from "react";
 
 import { ApiError, api } from "../api/client";
-import type { ModuleListResponse, TagListResponse, Task, TestCase, TestCaseCreate } from "../api/types";
+import type {
+  CaseBoundTestPlan,
+  CaseBoundTestPlanListResponse,
+  ModuleListResponse,
+  TagListResponse,
+  Task,
+  TestCase,
+  TestCaseCreate,
+} from "../api/types";
 import { CaseExecutionRecords } from "../components/case-execution-records";
+import { ConfirmDialog } from "../components/confirm-dialog";
 import { ExecuteDialog, type ExecuteConfig } from "../components/execute-dialog";
 import {
   buildExecuteConfig,
@@ -14,7 +23,10 @@ import {
   type ExecutionConfigDraft,
 } from "../components/execution-config-form";
 import { PageHeader } from "../components/page-header";
+import { PaginationControls } from "../components/pagination-controls";
 import { formatChinaDateTime } from "../utils/time";
+
+const BOUND_PLAN_PAGE_SIZE = 5;
 
 const DEFAULT_TEMPLATE = `## 执行任务（必填）
 
@@ -124,6 +136,9 @@ export function CaseEditorPage() {
   const [savedCaseId, setSavedCaseId] = useState<string | null>(null);
   const [defaultConfigEnabled, setDefaultConfigEnabled] = useState(false);
   const [defaultConfigDialogOpen, setDefaultConfigDialogOpen] = useState(false);
+  const [removePlanTarget, setRemovePlanTarget] = useState<CaseBoundTestPlan | null>(null);
+  const [boundPlanError, setBoundPlanError] = useState("");
+  const [boundPlanPage, setBoundPlanPage] = useState(1);
   const [defaultConfigDraft, setDefaultConfigDraft] =
     useState<ExecutionConfigDraft>(() => ({
       ...createExecutionConfigDraft(),
@@ -145,6 +160,15 @@ export function CaseEditorPage() {
   const modulesQuery = useQuery({
     queryKey: ["case-modules"],
     queryFn: () => api.get<ModuleListResponse>("/cases/modules"),
+  });
+
+  const boundPlansQuery = useQuery({
+    queryKey: ["case-bound-test-plans", existingId, boundPlanPage],
+    queryFn: () =>
+      api.get<CaseBoundTestPlanListResponse>(
+        `/cases/${existingId}/test-plans?page=${boundPlanPage}&page_size=${BOUND_PLAN_PAGE_SIZE}`,
+      ),
+    enabled: !isNew && Boolean(existingId),
   });
 
   useEffect(() => {
@@ -220,6 +244,30 @@ export function CaseEditorPage() {
       if (err instanceof ApiError) {
         setError(`执行失败：${err.message}`);
       }
+    },
+  });
+
+  const removePlanCaseMutation = useMutation({
+    mutationFn: (planId: string) =>
+      api.delete(`/test-plans/${planId}/cases/${existingId}`),
+    onMutate: () => {
+      setBoundPlanError("");
+    },
+    onSuccess: (_data, planId) => {
+      setRemovePlanTarget(null);
+      void queryClient.invalidateQueries({
+        queryKey: ["case-bound-test-plans", existingId],
+      });
+      void queryClient.invalidateQueries({ queryKey: ["test-plans"] });
+      void queryClient.invalidateQueries({ queryKey: ["test-plan", planId] });
+      void queryClient.invalidateQueries({ queryKey: ["test-plan-cases", planId] });
+    },
+    onError: (error) => {
+      setBoundPlanError(
+        error instanceof ApiError
+          ? casePlanRemoveMessage(error.code)
+          : "移除失败，请稍后重试。",
+      );
     },
   });
 
@@ -626,7 +674,78 @@ export function CaseEditorPage() {
           </div>
         </div>
 
-        {!isNew && existingId && <CaseExecutionRecords caseId={existingId} />}
+        {!isNew && existingId && (
+          <>
+            <section
+              className="form-card case-bound-plans-card"
+              aria-label="已绑定测试计划"
+            >
+              <div className="case-bound-plans-head">
+                <div>
+                  <div className="sidebar-section-title">已绑定测试计划</div>
+                  <p className="muted">
+                    {boundPlansQuery.isLoading
+                      ? "正在加载绑定关系..."
+                      : (boundPlansQuery.data?.total ?? 0) > 0
+                        ? `该用例被 ${boundPlansQuery.data?.total ?? 0} 个有效测试计划引用。`
+                        : "暂无绑定测试计划"}
+                  </p>
+                </div>
+              </div>
+              {boundPlansQuery.isError ? (
+                <div className="exec-records-empty error">
+                  加载失败：{boundPlansQuery.error instanceof ApiError ? boundPlansQuery.error.message : "未知错误"}
+                </div>
+              ) : !boundPlansQuery.isLoading && (boundPlansQuery.data?.total ?? 0) > 0 ? (
+                <div className="case-bound-plan-list">
+                  {boundPlansQuery.data?.items.map((plan) => (
+                    <div className="case-bound-plan-item" key={plan.id}>
+                      <div className="case-bound-plan-main">
+                        <Link to={`/test-plans/${plan.id}`} className="case-bound-plan-name">
+                          {plan.name}
+                        </Link>
+                        <div className="case-bound-plan-meta">
+                          <span>{testTypeLabel(plan.test_type)}</span>
+                          <span>{plan.case_count} 个用例</span>
+                          <span className={`badge-tag ${plan.has_active_execution ? "warning" : "success"}`}>
+                            {plan.has_active_execution ? "执行中" : "空闲"}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="case-bound-plan-actions">
+                        <Link to={`/test-plans/${plan.id}`} className="text-button">查看</Link>
+                        <button
+                          type="button"
+                          className="text-button danger"
+                          aria-label={`移除 ${plan.name}`}
+                          title={plan.has_active_execution ? "计划正在执行中，结束后才可移除用例" : undefined}
+                          disabled={plan.has_active_execution}
+                          onClick={() => {
+                            setBoundPlanError("");
+                            setRemovePlanTarget(plan);
+                          }}
+                        >
+                          移除
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                  {(boundPlansQuery.data?.total ?? 0) > BOUND_PLAN_PAGE_SIZE && (
+                    <PaginationControls
+                      page={boundPlanPage}
+                      pageSize={BOUND_PLAN_PAGE_SIZE}
+                      total={boundPlansQuery.data?.total ?? 0}
+                      onPageChange={setBoundPlanPage}
+                      onPageSizeChange={() => setBoundPlanPage(1)}
+                      showPageSize={false}
+                    />
+                  )}
+                </div>
+              ) : null}
+            </section>
+            <CaseExecutionRecords caseId={existingId} />
+          </>
+        )}
       </div>
 
       <ExecuteDialog
@@ -676,6 +795,36 @@ export function CaseEditorPage() {
           </div>
         </div>
       )}
+      <ConfirmDialog
+        open={removePlanTarget !== null}
+        title="从测试计划中移除用例"
+        description={removePlanTarget
+          ? `确认将「${title || existingCase.data?.title || "当前用例"}」从「${removePlanTarget.name}」中移除？这不会删除用例，也不会删除测试计划。`
+          : ""}
+        confirmLabel="确认移除"
+        pendingLabel="移除中..."
+        isPending={removePlanCaseMutation.isPending}
+        errorMessage={boundPlanError}
+        onClose={() => {
+          setRemovePlanTarget(null);
+          setBoundPlanError("");
+        }}
+        onConfirm={() => {
+          if (removePlanTarget) removePlanCaseMutation.mutate(removePlanTarget.id);
+        }}
+      />
     </div>
   );
+}
+
+function testTypeLabel(value: string): string {
+  return value === "new_feature" ? "新功能" : "回归测试";
+}
+
+function casePlanRemoveMessage(code: string): string {
+  if (code === "test_plan_execution_active") return "计划正在执行中，结束后才可移除用例。";
+  if (code === "test_plan_requires_one_case") return "测试计划至少需要保留 1 个用例。";
+  if (code === "case_not_in_test_plan") return "该用例已不在此测试计划中。";
+  if (code === "test_plan_not_found") return "测试计划不存在或已删除。";
+  return "移除失败，请稍后重试。";
 }
