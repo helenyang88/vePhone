@@ -20,6 +20,7 @@ import { MetricCard } from "../components/metric-card";
 import { PageHeader } from "../components/page-header";
 import { PaginationControls } from "../components/pagination-controls";
 import { SingleSelect } from "../components/single-select";
+import { tagToneClass } from "../utils/tag-tone";
 import { formatChinaDateTime } from "../utils/time";
 
 const PAGE_SIZE = 10;
@@ -39,6 +40,10 @@ function testTypeLabel(value: TestType | string | null | undefined): string {
   return value === "new_feature"
     ? TEST_TYPE_LABELS.new_feature
     : TEST_TYPE_LABELS.regression;
+}
+
+function testTypeClass(value: TestType | string | null | undefined): string {
+  return value === "new_feature" ? "new-feature" : "regression";
 }
 
 const STATUS_LABELS: Record<ReportStatus, string> = {
@@ -430,7 +435,7 @@ export function TestPlanListPage() {
                         )}
                       </td>
                       <td>
-                        <span className="test-plan-type-badge">
+                        <span className={`test-plan-type-badge ${testTypeClass(plan.test_type)}`}>
                           {testTypeLabel(plan.test_type)}
                         </span>
                       </td>
@@ -440,11 +445,7 @@ export function TestPlanListPage() {
                           {plan.tags.slice(0, 3).map((tag) => (
                             <span
                               key={tag.name}
-                              className="registered-tag"
-                              style={{
-                                color: tag.foreground_color,
-                                backgroundColor: tag.background_color,
-                              }}
+                              className={`tag ${tagToneClass(tag.name)}`}
                             >
                               {tag.name}
                             </span>

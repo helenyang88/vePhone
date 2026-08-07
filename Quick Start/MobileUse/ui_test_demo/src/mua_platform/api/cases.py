@@ -7,6 +7,11 @@ from mua_platform.api.deps import CsrfSession, CurrentUser, Database
 from mua_platform.api.errors import api_error
 from mua_platform.cases.models import CASE_TEMPLATE, TestCase
 from mua_platform.cases.schemas import (
+    CaseBatchDeleteItem,
+    CaseBatchDeleteRequest,
+    CaseBatchDeleteResponse,
+    CaseBoundTestPlanItem,
+    CaseBoundTestPlanListResponse,
     CaseImportConfirmRequest,
     CaseImportConfirmResponse,
     CaseImportPreviewRequest,
@@ -29,7 +34,10 @@ from mua_platform.settings.service import SettingsService
 from mua_platform.tasks.repository import SQLiteTaskRepository
 from mua_platform.tasks.schemas import TaskResponse
 from mua_platform.tasks.service import TaskService
-from mua_platform.test_plans.service import TagColorRegistryExhaustedError
+from mua_platform.test_plans.service import (
+    TagColorRegistryExhaustedError,
+    TestPlanService,
+)
 
 router = APIRouter(prefix="/api/v1/cases")
 
@@ -188,6 +196,52 @@ def import_cases(
     )
 
 
+@router.post("/batch-delete", response_model=CaseBatchDeleteResponse)
+def batch_delete_cases(
+    payload: CaseBatchDeleteRequest,
+    db: Database,
+    _user: CurrentUser,
+    _csrf_session: CsrfSession,
+) -> CaseBatchDeleteResponse:
+    service = CaseService(db)
+    items: list[CaseBatchDeleteItem] = []
+    seen: set[str] = set()
+    for case_id in payload.case_ids:
+        if case_id in seen:
+            continue
+        seen.add(case_id)
+        try:
+            deleted = service.delete_case(case_id)
+        except ValueError as exc:
+            code = str(exc)
+            items.append(
+                CaseBatchDeleteItem(
+                    case_id=case_id,
+                    status="failed",
+                    code=code,
+                    message=_case_delete_error_message(code),
+                )
+            )
+            continue
+        if deleted:
+            items.append(CaseBatchDeleteItem(case_id=case_id, status="deleted"))
+        else:
+            items.append(
+                CaseBatchDeleteItem(
+                    case_id=case_id,
+                    status="failed",
+                    code="case_not_found",
+                    message="Test case not found",
+                )
+            )
+    deleted_count = sum(item.status == "deleted" for item in items)
+    return CaseBatchDeleteResponse(
+        deleted_count=deleted_count,
+        failed_count=len(items) - deleted_count,
+        items=items,
+    )
+
+
 @router.get("/template")
 def get_case_template() -> dict[str, str]:
     return {"template": CASE_TEMPLATE}
@@ -238,6 +292,31 @@ def list_case_tasks(
         "page": page,
         "page_size": page_size,
     }
+
+
+@router.get(
+    "/{case_id}/test-plans",
+    response_model=CaseBoundTestPlanListResponse,
+)
+def list_case_test_plans(
+    case_id: str,
+    db: Database,
+    _user: CurrentUser,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(5, ge=1, le=20),
+) -> CaseBoundTestPlanListResponse:
+    _get_case(db, case_id)
+    items, total = TestPlanService(db).list_bound_plans_for_case(
+        case_id,
+        page,
+        page_size,
+    )
+    return CaseBoundTestPlanListResponse(
+        items=[CaseBoundTestPlanItem(**item) for item in items],
+        total=total,
+        page=page,
+        page_size=page_size,
+    )
 
 
 @router.post(
@@ -299,7 +378,7 @@ def delete_case(
             raise api_error(
                 409,
                 "case_has_tasks",
-                "Test case has execution history",
+                "Test case has queued or running tasks",
             ) from exc
         raise
     if not deleted:
@@ -312,6 +391,14 @@ def _tag_color_registry_exhausted():
         "tag_color_registry_exhausted",
         "No readable tag color is available",
     )
+
+
+def _case_delete_error_message(code: str) -> str:
+    if code == "case_has_test_plans":
+        return "Test case is bound to an active test plan"
+    if code == "case_has_tasks":
+        return "Test case has queued or running tasks"
+    return "Test case could not be deleted"
 
 
 @router.post(

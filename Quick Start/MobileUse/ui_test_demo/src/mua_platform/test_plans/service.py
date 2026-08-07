@@ -33,6 +33,18 @@ class TestPlanCasesNotFoundError(ValueError):
         self.case_ids = case_ids
 
 
+class TestPlanCaseNotFoundError(ValueError):
+    pass
+
+
+class TestPlanExecutionActiveError(ValueError):
+    pass
+
+
+class TestPlanRequiresOneCaseError(ValueError):
+    pass
+
+
 class TagColorRegistryExhaustedError(RuntimeError):
     pass
 
@@ -409,6 +421,81 @@ class TestPlanService:
         )
         return cases, total
 
+    def list_bound_plans_for_case(
+        self,
+        case_id: str,
+        page: int,
+        page_size: int,
+    ) -> tuple[list[dict], int]:
+        plan_ids = (
+            select(TestPlanCase.plan_id).where(
+                TestPlanCase.case_id == case_id
+            )
+        )
+        total = self.db.scalar(
+            select(func.count(TestPlan.id)).where(
+                TestPlan.deleted_at.is_(None),
+                TestPlan.id.in_(plan_ids),
+            )
+        ) or 0
+        rows = self.db.execute(
+            select(
+                TestPlan,
+                func.count(TestPlanCase.case_id).label("case_count"),
+            )
+            .join(TestPlanCase, TestPlanCase.plan_id == TestPlan.id)
+            .where(
+                TestPlan.deleted_at.is_(None),
+                TestPlan.id.in_(plan_ids),
+            )
+            .group_by(TestPlan.id)
+            .order_by(TestPlan.updated_at.desc(), TestPlan.id.desc())
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+        ).all()
+        return (
+            [
+                {
+                    "id": plan.id,
+                    "name": plan.name,
+                    "test_type": self._normalized_test_type(plan.test_type),
+                    "case_count": case_count,
+                    "has_active_execution": self._has_active_execution(plan.id),
+                    "created_by": plan.created_by,
+                    "updated_at": plan.updated_at,
+                }
+                for plan, case_count in rows
+            ],
+            total,
+        )
+
+    def remove_case(self, plan_id: str, case_id: str) -> bool:
+        plan = self.get(plan_id)
+        if plan is None:
+            return False
+        association = next(
+            (item for item in plan.cases if item.case_id == case_id),
+            None,
+        )
+        if association is None:
+            raise TestPlanCaseNotFoundError("case_not_in_test_plan")
+        if len(plan.cases) <= 1:
+            raise TestPlanRequiresOneCaseError("test_plan_requires_one_case")
+        if self._has_active_execution(plan_id):
+            raise TestPlanExecutionActiveError("test_plan_execution_active")
+
+        remaining = [
+            item
+            for item in sorted(plan.cases, key=lambda item: item.position)
+            if item.case_id != case_id
+        ]
+        plan.cases.remove(association)
+        self.db.flush()
+        for position, item in enumerate(remaining):
+            item.position = position
+        self.db.commit()
+        return True
+
     def response(self, plan: TestPlan) -> TestPlanResponse:
         return self.responses([plan])[0]
 
@@ -553,6 +640,23 @@ class TestPlanService:
             TestPlan.test_type == "",
         )
 
+    def _has_active_execution(self, plan_id: str) -> bool:
+        return self.db.scalar(
+            select(PlanExecution.id)
+            .join(TaskBatch, TaskBatch.id == PlanExecution.task_batch_id)
+            .where(
+                PlanExecution.test_plan_id == plan_id,
+                TaskBatch.execution_status.in_(
+                    (
+                        ExecutionStatus.SCRIPT_PENDING,
+                        ExecutionStatus.QUEUED,
+                        ExecutionStatus.RUNNING,
+                    )
+                ),
+            )
+            .limit(1)
+        ) is not None
+
     def _required(self, plan_id: str) -> TestPlan:
         self.db.expire_all()
         plan = self.get(plan_id)
@@ -563,7 +667,10 @@ class TestPlanService:
     def _require_cases(self, case_ids: list[str]) -> list[TestCase]:
         cases = list(
             self.db.scalars(
-                select(TestCase).where(TestCase.id.in_(case_ids))
+                select(TestCase).where(
+                    TestCase.id.in_(case_ids),
+                    TestCase.deleted_at.is_(None),
+                )
             )
         )
         case_by_id = {case.id: case for case in cases}

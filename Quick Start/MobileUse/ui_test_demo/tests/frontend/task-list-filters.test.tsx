@@ -292,6 +292,42 @@ it("renders the phase-one task table structure with real single-case source", as
   expect(screen.queryByText("单用例")).not.toBeInTheDocument();
 });
 
+it("keeps a long execution object name truncated with the full name available on hover", async () => {
+  const longScenario = "Mock验证-执行对象名称超长展示-登录注册支付退款会员权益优惠券库存同步订单详情售后入口全链路回归验证";
+  server.use(
+    http.get("/api/v1/tasks", () =>
+      HttpResponse.json({
+        items: [makeTask({
+          id: "task_long_target",
+          case_id: "case_long_target",
+          scenario: longScenario,
+        })],
+        total: 1,
+        page: 1,
+        page_size: 20,
+      }),
+    ),
+  );
+
+  renderApp("/tasks");
+
+  const row = (await screen.findByText("task_long_target")).closest("tr") as HTMLElement;
+  const targetCell = cellFor(row, "执行对象");
+  const targetLink = within(targetCell).getByRole("link", { name: longScenario });
+  const wrapper = targetLink.closest(".task-target-name-wrapper");
+  const css = readFileSync("web/styles.css", "utf8");
+  expect(targetLink).toHaveClass("task-target-link");
+  expect(targetLink).not.toHaveAttribute("title");
+  expect(wrapper).toHaveAttribute("data-full-title", longScenario);
+  expect(within(targetCell).getByText("case_long_target")).toBeVisible();
+  expect(css).toMatch(
+    /\.task-target-link\s*\{[^}]*display:\s*block;[^}]*max-width:\s*280px;[^}]*overflow:\s*hidden;[^}]*text-overflow:\s*ellipsis;[^}]*white-space:\s*nowrap;/s,
+  );
+  expect(css).toMatch(
+    /\.task-target-name-wrapper::after\s*\{[^}]*content:\s*attr\(data-full-title\)/s,
+  );
+});
+
 it("renders shared batch id and child task id for multi-case rows", async () => {
   server.use(
     http.get("/api/v1/tasks", () =>

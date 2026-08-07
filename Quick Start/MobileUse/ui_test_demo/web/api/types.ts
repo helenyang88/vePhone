@@ -302,6 +302,7 @@ export type TestCase = {
   pass_count: number;
   fail_count: number;
   last_executed_at: string | null;
+  bound_plan_count?: number;
   created_by: string;
   created_at: string;
   updated_at: string;
@@ -309,6 +310,23 @@ export type TestCase = {
 
 export type TestCaseListResponse = {
   items: TestCase[];
+  total: number;
+  page: number;
+  page_size: number;
+};
+
+export type CaseBoundTestPlan = {
+  id: string;
+  name: string;
+  test_type: TestType;
+  case_count: number;
+  has_active_execution: boolean;
+  created_by: string;
+  updated_at: string;
+};
+
+export type CaseBoundTestPlanListResponse = {
+  items: CaseBoundTestPlan[];
   total: number;
   page: number;
   page_size: number;
@@ -360,6 +378,19 @@ export type CaseExecuteRequest = {
   timeout_seconds?: number | null;
   agent_config_mode?: "global" | "custom" | "case_default";
   agent_options?: AgentRuntimeOptions | null;
+};
+
+export type CaseBatchDeleteItem = {
+  case_id: string;
+  status: "deleted" | "failed";
+  code: string | null;
+  message: string | null;
+};
+
+export type CaseBatchDeleteResponse = {
+  deleted_count: number;
+  failed_count: number;
+  items: CaseBatchDeleteItem[];
 };
 
 export type ExecutionStatus =
@@ -758,6 +789,7 @@ export type PlanReportTask = {
   task_id: string;
   case_id: string;
   case_title: string;
+  case_deleted: boolean;
   execution_status: ReportTaskExecutionStatus;
   verdict: ReportTaskVerdict | null;
   failure_type: string | null;

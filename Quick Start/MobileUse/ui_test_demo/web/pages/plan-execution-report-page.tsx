@@ -258,6 +258,15 @@ export function PlanExecutionReportPage() {
                       <td>
                         <strong>{task.case_title}</strong>
                         <code translate="no">{task.case_id}</code>
+                        {!task.case_deleted && (
+                          <Link
+                            className="text-button plan-report-case-link"
+                            to={`/cases/${task.case_id}/edit`}
+                            aria-label={`查看用例 ${task.case_title}`}
+                          >
+                            查看用例
+                          </Link>
+                        )}
                       </td>
                       <td>
                         <span className={`task-report-task-status ${task.execution_status}`}>

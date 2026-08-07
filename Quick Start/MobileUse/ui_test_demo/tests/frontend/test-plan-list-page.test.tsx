@@ -130,6 +130,14 @@ const planTagList: TagOptionListResponse = {
   page_size: 100,
 };
 
+function expectedTagToneClass(tag: string): string {
+  let hash = 7;
+  for (const char of tag) {
+    hash = (hash * 33 + char.charCodeAt(0)) >>> 0;
+  }
+  return `tag-tone-${hash % 5}`;
+}
+
 it("keeps search labels accessible without letting them consume control width", () => {
   expect(STYLES).toMatch(
     /\.sr-only\s*\{[^}]*position:\s*absolute[^}]*width:\s*1px[^}]*height:\s*1px[^}]*overflow:\s*hidden/s,
@@ -250,6 +258,69 @@ it("adds the test plan navigation and separates result from latest execution", a
   );
   expect(actions).toHaveLength(3);
   actions.forEach((element) => expect(element).toHaveClass("icon-action"));
+});
+
+it("centers case and tag columns and uses distinct colors for types and tags", async () => {
+  const newFeaturePlan = {
+    ...plans.items[0],
+    id: "plan_new_feature",
+    name: "新功能验收",
+    test_type: "new_feature" as const,
+    tags: [
+      {
+        name: "新功能",
+        foreground_color: "#B45309",
+        background_color: "#FEF3C7",
+        case_count: null,
+      },
+    ],
+  };
+  server.use(
+    http.get("/api/v1/test-plans", () =>
+      HttpResponse.json({
+        ...plans,
+        items: [plans.items[0], newFeaturePlan],
+        total: 2,
+      })),
+    http.get("/api/v1/test-plans/stats", () => HttpResponse.json(stats)),
+    http.get("/api/v1/test-plans/tags", () => HttpResponse.json(planTagList)),
+  );
+
+  renderApp("/test-plans");
+
+  const regressionRow = (await screen.findByRole("link", {
+    name: "登录核心回归",
+  })).closest("tr") as HTMLElement;
+  const newFeatureRow = screen.getByRole("link", {
+    name: "新功能验收",
+  }).closest("tr") as HTMLElement;
+  expect(within(regressionRow).getByText("回归测试"))
+    .toHaveClass("test-plan-type-badge", "regression");
+  expect(within(newFeatureRow).getByText("新功能测试"))
+    .toHaveClass("test-plan-type-badge", "new-feature");
+  const tag = within(newFeatureRow).getByText("新功能");
+  expect(tag).toHaveClass("tag", expectedTagToneClass("新功能"));
+  expect(tag).not.toHaveClass("registered-tag");
+  expect(tag).not.toHaveAttribute("style");
+  const coreTag = within(regressionRow).getByText("核心链路");
+  const p0Tag = within(regressionRow).getByText("P0");
+  expect(coreTag).toHaveClass("tag", expectedTagToneClass("核心链路"));
+  expect(p0Tag).toHaveClass("tag", expectedTagToneClass("P0"));
+  expect(STYLES).toMatch(
+    /\.test-plan-table th:nth-child\(3\),[\s\S]*?\.test-plan-table th:nth-child\(4\)\s*\{[^}]*text-align:\s*center;/s,
+  );
+  expect(STYLES).toMatch(
+    /\.test-plan-table td:nth-child\(3\),[\s\S]*?\.test-plan-table td:nth-child\(4\)\s*\{[^}]*text-align:\s*center;/s,
+  );
+  expect(STYLES).toMatch(
+    /\.test-plan-table td:nth-child\(4\)\s+\.test-plan-tags\s*\{[^}]*justify-content:\s*center;/s,
+  );
+  expect(STYLES).toMatch(
+    /\.test-plan-type-badge\.regression\s*\{[^}]*background:\s*#ecfeff;[^}]*color:\s*#0e7490;/s,
+  );
+  expect(STYLES).toMatch(
+    /\.test-plan-type-badge\.new-feature\s*\{[^}]*background:\s*var\(--state-review-bg\);[^}]*color:\s*var\(--state-review-fg\);/s,
+  );
 });
 
 it("keeps long test plan names compact and supports copying the full name", async () => {

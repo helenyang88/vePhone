@@ -126,6 +126,54 @@ def test_list_cases_tag_filter_matches_when_case_contains_tag(authenticated_clie
     assert [item["id"] for item in body["items"]] == [matched]
 
 
+def test_list_cases_includes_active_bound_plan_count(authenticated_client):
+    bound = _create_case(authenticated_client, "有关联计划")
+    unbound = _create_case(authenticated_client, "无关联计划")
+    deleted_plan_case = _create_case(authenticated_client, "仅关联已删除计划")
+    first_response = authenticated_client.post(
+        "/api/v1/test-plans",
+        json={
+            "name": "关联计划一",
+            "description": "",
+            "tags": [],
+            "case_ids": [bound],
+        },
+    )
+    assert first_response.status_code == 201, first_response.text
+    first_plan = first_response.json()
+    second_response = authenticated_client.post(
+        "/api/v1/test-plans",
+        json={
+            "name": "关联计划二",
+            "description": "",
+            "tags": [],
+            "case_ids": [bound],
+        },
+    )
+    assert second_response.status_code == 201, second_response.text
+    deleted_response = authenticated_client.post(
+        "/api/v1/test-plans",
+        json={
+            "name": "已删除关联计划",
+            "description": "",
+            "tags": [],
+            "case_ids": [deleted_plan_case],
+        },
+    )
+    assert deleted_response.status_code == 201, deleted_response.text
+    deleted_plan = deleted_response.json()
+    authenticated_client.delete(f"/api/v1/test-plans/{deleted_plan['id']}")
+
+    response = authenticated_client.get("/api/v1/cases", params={"page_size": 100})
+
+    assert response.status_code == 200
+    by_id = {item["id"]: item for item in response.json()["items"]}
+    assert by_id[bound]["bound_plan_count"] == 2
+    assert by_id[unbound]["bound_plan_count"] == 0
+    assert by_id[deleted_plan_case]["bound_plan_count"] == 0
+    assert first_plan["case_count"] == 1
+
+
 def test_list_cases_matches_repeated_tags_with_or_semantics(authenticated_client):
     first = _create_case_with_tags(authenticated_client, "A", ["P0"])
     second = _create_case_with_tags(authenticated_client, "B", ["smoke"])
@@ -725,6 +773,104 @@ def test_delete_case_with_task_history_returns_conflict(authenticated_client):
     assert response.status_code == 409
     assert response.json()["error"]["code"] == "case_has_tasks"
     assert authenticated_client.get(f"/api/v1/cases/{case_id}").status_code == 200
+
+
+def test_delete_case_with_completed_task_soft_deletes(authenticated_client):
+    case_id = _create_case(authenticated_client, "已有完成记录可软删")
+    task_id = _seed_task(
+        authenticated_client,
+        case_id,
+        "soft-delete-completed",
+        status=ExecutionStatus.RESULT_READY,
+        verdict=Verdict.PASS,
+    )
+
+    response = authenticated_client.delete(f"/api/v1/cases/{case_id}")
+
+    assert response.status_code == 204, response.text
+    assert authenticated_client.get(f"/api/v1/cases/{case_id}").status_code == 404
+    list_response = authenticated_client.get("/api/v1/cases")
+    assert case_id not in [item["id"] for item in list_response.json()["items"]]
+    with authenticated_client.app.state.session_factory() as db:
+        case = db.get(CaseModel, case_id)
+        assert case is not None
+        assert case.deleted_at is not None
+        assert db.get(Task, task_id) is not None
+
+
+def test_delete_case_with_cancelled_task_soft_deletes(authenticated_client):
+    case_id = _create_case(authenticated_client, "已取消记录可软删")
+    _seed_task(
+        authenticated_client,
+        case_id,
+        "soft-delete-cancelled",
+        status=ExecutionStatus.CANCELLED,
+    )
+
+    response = authenticated_client.delete(f"/api/v1/cases/{case_id}")
+
+    assert response.status_code == 204, response.text
+    with authenticated_client.app.state.session_factory() as db:
+        case = db.get(CaseModel, case_id)
+        assert case is not None
+        assert case.deleted_at is not None
+
+
+def test_batch_delete_cases_returns_per_case_results(authenticated_client):
+    removable_id = _create_case(authenticated_client, "可批量删除")
+    with_task_id = _create_case(authenticated_client, "已有执行记录")
+    bound_id = _create_case(authenticated_client, "已绑定计划")
+    _seed_task(authenticated_client, with_task_id, "batch-delete-task")
+    with authenticated_client.app.state.session_factory() as db:
+        from mua_platform.test_plans.models import TestPlan, TestPlanCase
+
+        plan = TestPlan(
+            id="plan_batch_delete",
+            name="批量删除保护计划",
+            name_key="批量删除保护计划",
+            test_type="regression",
+            tags=[],
+            created_by="admin",
+        )
+        db.add(plan)
+        db.add(TestPlanCase(plan_id=plan.id, case_id=bound_id, position=0))
+        db.commit()
+
+    response = authenticated_client.post(
+        "/api/v1/cases/batch-delete",
+        json={
+            "case_ids": [
+                removable_id,
+                with_task_id,
+                bound_id,
+                "case_missing",
+            ],
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["deleted_count"] == 1
+    assert body["failed_count"] == 3
+    by_id = {item["case_id"]: item for item in body["items"]}
+    assert by_id[removable_id] == {
+        "case_id": removable_id,
+        "status": "deleted",
+        "code": None,
+        "message": None,
+    }
+    assert by_id[with_task_id]["status"] == "failed"
+    assert by_id[with_task_id]["code"] == "case_has_tasks"
+    assert by_id[bound_id]["status"] == "failed"
+    assert by_id[bound_id]["code"] == "case_has_test_plans"
+    assert by_id["case_missing"]["status"] == "failed"
+    assert by_id["case_missing"]["code"] == "case_not_found"
+    with authenticated_client.app.state.session_factory() as db:
+        removable = db.get(CaseModel, removable_id)
+        assert removable is not None
+        assert removable.deleted_at is not None
+        assert db.get(CaseModel, with_task_id) is not None
+        assert db.get(CaseModel, bound_id) is not None
 
 
 def test_create_from_case_reuses_same_idempotent_request(authenticated_client):

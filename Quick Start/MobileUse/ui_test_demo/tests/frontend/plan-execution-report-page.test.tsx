@@ -58,6 +58,7 @@ function detail(
         task_id: "task_1",
         case_id: "case_1",
         case_title: "登录",
+        case_deleted: false,
         execution_status: "result_ready",
         verdict: "pass",
         failure_type: null,
@@ -70,6 +71,7 @@ function detail(
         task_id: "task_unknown",
         case_id: "case_2",
         case_title: "异常数据",
+        case_deleted: true,
         execution_status: "unknown",
         verdict: "unknown",
         failure_type: "runner_interrupted",
@@ -105,6 +107,10 @@ it("shows plain metrics, safe snapshots, unknown enums and task drill-down", asy
     "href",
     "/tasks/task_1",
   );
+  expect(screen.getByRole("link", { name: "查看用例 登录" }))
+    .toHaveAttribute("href", "/cases/case_1/edit");
+  expect(screen.queryByRole("link", { name: "查看用例 异常数据" }))
+    .not.toBeInTheDocument();
   expect(screen.getByText("未知状态")).toBeVisible();
   expect(screen.getByText("未知结果")).toBeVisible();
   expect(screen.getByText("runner_interrupted")).toBeVisible();

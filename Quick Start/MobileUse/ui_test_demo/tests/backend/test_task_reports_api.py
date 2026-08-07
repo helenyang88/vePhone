@@ -519,6 +519,23 @@ def test_deleted_plan_report_remains_readable_from_snapshot(
     assert response.json()["plan_name_snapshot"].startswith("历史计划")
 
 
+def test_report_detail_marks_soft_deleted_cases(authenticated_client):
+    report = _seed_report(authenticated_client, plan_name="软删除用例报告")
+    case_id = report["case_ids"][0]
+    authenticated_client.delete(f"/api/v1/test-plans/{report['plan']['id']}")
+    deleted = authenticated_client.delete(f"/api/v1/cases/{case_id}")
+
+    response = authenticated_client.get(
+        f"/api/v1/task-reports/{report['execution_id']}"
+    )
+
+    assert deleted.status_code == 204
+    assert response.status_code == 200
+    task = response.json()["tasks"][0]
+    assert task["case_id"] == case_id
+    assert task["case_deleted"] is True
+
+
 def test_report_detail_paginates_tasks_in_plan_order(
     authenticated_client,
 ):

@@ -200,6 +200,7 @@ class PlanReportService:
                 Task.id.label("task_id"),
                 Task.case_id.label("case_id"),
                 TestCase.title.label("case_title"),
+                TestCase.deleted_at.label("case_deleted_at"),
                 cast(Task.execution_status, String).label(
                     "execution_status"
                 ),
@@ -220,6 +221,7 @@ class PlanReportService:
                 task_id=task_row.task_id,
                 case_id=task_row.case_id,
                 case_title=task_row.case_title,
+                case_deleted=task_row.case_deleted_at is not None,
                 execution_status=_controlled_task_status(
                     task_row.execution_status
                 ),
