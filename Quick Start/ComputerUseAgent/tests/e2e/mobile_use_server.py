@@ -2,11 +2,11 @@ import os
 from threading import Lock
 from typing import Any
 
-from mua_platform.diagnostics.mobile_use import RemotePodResult, RemoteProbeResult
-from mua_platform.main import create_app
-from mua_platform.pods.gateway import PodGateway
-from mua_platform.runners import universal_gateway
-from mua_platform.runners.universal_gateway import UniversalRemoteError, UniversalRequest
+from cua_platform.diagnostics.mobile_use import RemotePodResult, RemoteProbeResult
+from cua_platform.main import create_app
+from cua_platform.pods.gateway import PodGateway
+from cua_platform.runners import universal_gateway
+from cua_platform.runners.universal_gateway import UniversalRemoteError, UniversalRequest
 
 if os.environ.get("APP_ENV") != "e2e":
     raise RuntimeError("mobile_use_server_requires_e2e_environment")

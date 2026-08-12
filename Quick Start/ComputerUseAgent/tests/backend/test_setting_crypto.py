@@ -5,11 +5,11 @@ import sys
 import pytest
 from sqlalchemy import select
 
-from mua_platform.db import Base, create_engine_and_session
-from mua_platform.settings.crypto import SettingCipher, SettingDecryptionError
-from mua_platform.settings.models import Setting
-from mua_platform.settings.repository import SettingRepository
-from mua_platform.settings.service import SettingsService
+from cua_platform.db import Base, create_engine_and_session
+from cua_platform.settings.crypto import SettingCipher, SettingDecryptionError
+from cua_platform.settings.models import Setting
+from cua_platform.settings.repository import SettingRepository
+from cua_platform.settings.service import SettingsService
 
 
 def test_settings_public_api_imports_in_fresh_process():
@@ -18,7 +18,7 @@ def test_settings_public_api_imports_in_fresh_process():
             sys.executable,
             "-c",
             (
-                "from mua_platform.settings import "
+                "from cua_platform.settings import "
                 "Setting, SettingCipher, SettingDecryptionError, SettingRepository"
             ),
         ],

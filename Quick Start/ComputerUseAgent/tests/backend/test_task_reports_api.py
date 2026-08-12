@@ -4,9 +4,9 @@ from uuid import uuid4
 import pytest
 from sqlalchemy import event, text
 
-from mua_platform.tasks.models import Task, TaskBatch
-from mua_platform.tasks.state_machine import ExecutionStatus, Verdict
-from mua_platform.test_plans.models import PlanExecution
+from cua_platform.tasks.models import Task, TaskBatch
+from cua_platform.tasks.state_machine import ExecutionStatus, Verdict
+from cua_platform.test_plans.models import PlanExecution
 
 
 def _create_case(client, title: str) -> str:
@@ -219,7 +219,7 @@ def test_report_uses_snapshot_pass_rate_duration_and_public_config(
 ):
     now = datetime(2026, 1, 1, 9, 2, tzinfo=UTC)
     monkeypatch.setattr(
-        "mua_platform.test_plans.reports.utc_now",
+        "cua_platform.test_plans.reports.utc_now",
         lambda: now,
     )
     report = _seed_report(

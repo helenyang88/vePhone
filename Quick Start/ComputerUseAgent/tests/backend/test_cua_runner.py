@@ -1,9 +1,9 @@
 import pytest
 
-from mua_platform.runners.base import RunRequest
-from mua_platform.runners.mobile_use import MobileUseRunner
-from mua_platform.runners.universal_gateway import RemoteRun
-from mua_platform.settings.schemas import RunnerConfig
+from cua_platform.runners.base import RunRequest
+from cua_platform.runners.mobile_use import MobileUseRunner
+from cua_platform.runners.universal_gateway import RemoteRun
+from cua_platform.settings.schemas import RunnerConfig
 
 
 class CapturingGateway:

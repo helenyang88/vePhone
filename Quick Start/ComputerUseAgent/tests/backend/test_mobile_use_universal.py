@@ -3,14 +3,14 @@ from types import SimpleNamespace
 
 import pytest
 
-from mua_platform.diagnostics import universal as diagnostic_universal
-from mua_platform.diagnostics.mobile_use import RemotePodResult, RemoteProbeResult
-from mua_platform.diagnostics.universal import UniversalMobileUseClient
-from mua_platform.runners.universal_gateway import (
+from cua_platform.diagnostics import universal as diagnostic_universal
+from cua_platform.diagnostics.mobile_use import RemotePodResult, RemoteProbeResult
+from cua_platform.diagnostics.universal import UniversalMobileUseClient
+from cua_platform.runners.universal_gateway import (
     UniversalRemoteError,
     UniversalRequest,
 )
-from mua_platform.settings.schemas import RunnerConfig
+from cua_platform.settings.schemas import RunnerConfig
 
 
 @pytest.mark.asyncio

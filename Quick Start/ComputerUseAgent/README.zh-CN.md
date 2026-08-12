@@ -75,7 +75,7 @@ COMPUTER_USE_ACCOUNT_ID=your-volcengine-account-id
 本地开发建议分别启动后端和前端：
 
 ```bash
-uv run uvicorn mua_platform.main:app --host 0.0.0.0 --port 8001 --reload
+uv run uvicorn cua_platform.main:app --host 0.0.0.0 --port 8001 --reload
 npm run dev
 ```
 
@@ -204,7 +204,7 @@ http://localhost:8001
 uv sync
 npm ci
 npm run build
-uv run uvicorn mua_platform.main:app --host 0.0.0.0 --port 8001
+uv run uvicorn cua_platform.main:app --host 0.0.0.0 --port 8001
 ```
 
 如果需要 HTTPS 或域名访问，建议在前面加 Nginx、Caddy 或其他网关，并把 `APP_BASE_URL` 设置为外部访问地址。
@@ -279,14 +279,14 @@ make e2e           # Playwright E2E
 Dockerfile                 Docker 镜像构建示例
 ARCHITECTURE.md            架构说明和运行边界
 scripts/                   部署辅助脚本
-src/mua_platform/          FastAPI 应用和领域服务
+src/cua_platform/          FastAPI 应用和领域服务
 web/                       React 应用、页面、组件和样式
 tests/backend/             pytest 后端测试
 tests/frontend/            Vitest 前端测试
 tests/e2e/                 Playwright E2E 测试
 ```
 
-Python 包名仍保留 `mua_platform`，这是为了兼容原有工程结构。当前公开行为和文档均面向 Computer Use Agent（CUA）。
+Python 后端包名为 `cua_platform`。当前公开行为和文档均面向 Computer Use Agent（CUA）。
 
 ## 运维注意事项
 

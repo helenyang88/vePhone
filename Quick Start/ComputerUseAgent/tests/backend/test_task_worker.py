@@ -5,11 +5,11 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from sqlalchemy import func, select
 
-from mua_platform.cases.models import TestCase as CaseModel
-from mua_platform.tasks.models import PodLease, Task
-from mua_platform.tasks.repository import SQLiteTaskRepository
-from mua_platform.tasks.state_machine import ExecutionStatus, Verdict
-from mua_platform.tasks.worker import TaskWorker
+from cua_platform.cases.models import TestCase as CaseModel
+from cua_platform.tasks.models import PodLease, Task
+from cua_platform.tasks.repository import SQLiteTaskRepository
+from cua_platform.tasks.state_machine import ExecutionStatus, Verdict
+from cua_platform.tasks.worker import TaskWorker
 
 
 @pytest.mark.asyncio

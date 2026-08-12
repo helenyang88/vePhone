@@ -2,9 +2,9 @@ import pytest
 from sqlalchemy import func, select, text
 from sqlalchemy.exc import IntegrityError
 
-from mua_platform.tasks.models import Task, TaskBatch, TaskRunnerConfig
-from mua_platform.tasks.state_machine import ExecutionStatus
-from mua_platform.test_plans.models import PlanExecution
+from cua_platform.tasks.models import Task, TaskBatch, TaskRunnerConfig
+from cua_platform.tasks.state_machine import ExecutionStatus
+from cua_platform.test_plans.models import PlanExecution
 
 
 def _configure_runner(client) -> None:

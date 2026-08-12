@@ -3,15 +3,15 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
-from mua_platform.business.models import BusinessSpace
-from mua_platform.business.service import business_name_key
-from mua_platform.cases.models import TestCase as CaseModel
-from mua_platform.db import Base
-from mua_platform.pods.models import DiscoveredPod
-from mua_platform.tasks.models import PodLease, Task, TaskBatch, TaskRunnerConfig
-from mua_platform.tasks.repository import SQLiteTaskRepository
-from mua_platform.tasks.scheduler import BatchScheduler
-from mua_platform.tasks.state_machine import ExecutionStatus, Verdict
+from cua_platform.business.models import BusinessSpace
+from cua_platform.business.service import business_name_key
+from cua_platform.cases.models import TestCase as CaseModel
+from cua_platform.db import Base
+from cua_platform.pods.models import DiscoveredPod
+from cua_platform.tasks.models import PodLease, Task, TaskBatch, TaskRunnerConfig
+from cua_platform.tasks.repository import SQLiteTaskRepository
+from cua_platform.tasks.scheduler import BatchScheduler
+from cua_platform.tasks.state_machine import ExecutionStatus, Verdict
 
 
 def _seed_batch(

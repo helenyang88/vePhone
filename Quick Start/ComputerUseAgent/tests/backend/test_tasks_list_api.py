@@ -3,9 +3,9 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from sqlalchemy import text
 
-from mua_platform.tasks.models import Task
-from mua_platform.tasks.repository import SQLiteTaskRepository
-from mua_platform.tasks.state_machine import ExecutionStatus, Verdict
+from cua_platform.tasks.models import Task
+from cua_platform.tasks.repository import SQLiteTaskRepository
+from cua_platform.tasks.state_machine import ExecutionStatus, Verdict
 
 
 @pytest.fixture()

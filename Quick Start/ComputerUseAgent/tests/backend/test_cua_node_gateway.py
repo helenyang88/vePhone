@@ -2,9 +2,9 @@ from collections.abc import Mapping
 
 import pytest
 
-from mua_platform.pods.gateway import PodGateway
-from mua_platform.runners.universal_gateway import UniversalRequest
-from mua_platform.settings.schemas import RunnerConfig
+from cua_platform.pods.gateway import PodGateway
+from cua_platform.runners.universal_gateway import UniversalRequest
+from cua_platform.settings.schemas import RunnerConfig
 
 
 def cua_config() -> RunnerConfig:

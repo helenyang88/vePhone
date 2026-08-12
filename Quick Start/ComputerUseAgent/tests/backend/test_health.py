@@ -2,8 +2,8 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.exc import SQLAlchemyError
 
-from mua_platform import db
-from mua_platform.main import create_app
+from cua_platform import db
+from cua_platform.main import create_app
 
 
 def test_health_endpoints(client):
@@ -28,7 +28,7 @@ def test_readiness_reports_not_ready_when_database_check_fails(client, monkeypat
     def raise_database_error(_engine):
         raise SQLAlchemyError("database unavailable")
 
-    monkeypatch.setattr("mua_platform.main.database_is_ready", raise_database_error)
+    monkeypatch.setattr("cua_platform.main.database_is_ready", raise_database_error)
 
     response = client.get("/health/ready")
 
@@ -81,9 +81,9 @@ def test_readiness_returns_503_with_failed_check(
     worker_ready,
     failed_check,
 ):
-    monkeypatch.setattr("mua_platform.main.database_is_ready", lambda _engine: database_ready)
+    monkeypatch.setattr("cua_platform.main.database_is_ready", lambda _engine: database_ready)
     monkeypatch.setattr(
-        "mua_platform.main.data_directory_is_writable",
+        "cua_platform.main.data_directory_is_writable",
         lambda _path: directory_ready,
     )
     monkeypatch.setattr(
@@ -110,8 +110,8 @@ def test_readiness_returns_failed_checks_in_stable_order_without_affecting_liven
     client,
     monkeypatch,
 ):
-    monkeypatch.setattr("mua_platform.main.database_is_ready", lambda _engine: False)
-    monkeypatch.setattr("mua_platform.main.data_directory_is_writable", lambda _path: False)
+    monkeypatch.setattr("cua_platform.main.database_is_ready", lambda _engine: False)
+    monkeypatch.setattr("cua_platform.main.data_directory_is_writable", lambda _path: False)
     monkeypatch.setattr(
         type(client.app.state.task_worker),
         "is_running",

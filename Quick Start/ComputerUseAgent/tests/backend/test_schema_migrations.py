@@ -6,15 +6,15 @@ from sqlalchemy import create_engine, event, inspect, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from mua_platform.cases.models import TestCase as CaseModel
-from mua_platform.db import (
+from cua_platform.cases.models import TestCase as CaseModel
+from cua_platform.db import (
     Base,
     _TAG_COLOR_CANDIDATES,
     _unused_tag_color,
     ensure_schema_migrations,
 )
-from mua_platform.pods.repository import PodRepository
-from mua_platform.test_plans.models import TagColorRegistry
+from cua_platform.pods.repository import PodRepository
+from cua_platform.test_plans.models import TagColorRegistry
 
 
 def _relative_luminance(color: str | tuple[float, float, float]) -> float:

@@ -1,4 +1,4 @@
-from mua_platform.runners.mobile_use_parser import (
+from cua_platform.runners.mobile_use_parser import (
     parse_agent_result,
     step_status_is_terminal,
 )

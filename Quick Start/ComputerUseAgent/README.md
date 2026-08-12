@@ -84,7 +84,7 @@ COMPUTER_USE_ACCOUNT_ID=your-volcengine-account-id
 Start backend and frontend separately for local development:
 
 ```bash
-uv run uvicorn mua_platform.main:app --host 0.0.0.0 --port 8001 --reload
+uv run uvicorn cua_platform.main:app --host 0.0.0.0 --port 8001 --reload
 npm run dev
 ```
 
@@ -220,7 +220,7 @@ Typical non-Docker deployment:
 uv sync
 npm ci
 npm run build
-uv run uvicorn mua_platform.main:app --host 0.0.0.0 --port 8001
+uv run uvicorn cua_platform.main:app --host 0.0.0.0 --port 8001
 ```
 
 For HTTPS, put Nginx, Caddy, or another reverse proxy in front of the backend
@@ -300,16 +300,15 @@ shown in Quick Start.
 Dockerfile                 Docker image example
 ARCHITECTURE.md            Architecture and runtime boundaries
 scripts/                   Deployment helper scripts
-src/mua_platform/          FastAPI app and domain services
+src/cua_platform/          FastAPI app and domain services
 web/                       React app, pages, components, styles
 tests/backend/             pytest backend tests
 tests/frontend/            Vitest frontend tests
 tests/e2e/                 Playwright tests
 ```
 
-The Python package name still uses `mua_platform` for compatibility with the
-original internal project structure. Public product behavior and documentation
-in this repository are for Computer Use Agent (CUA).
+The Python backend package is `cua_platform`. Public product behavior and
+documentation in this repository are for Computer Use Agent (CUA).
 
 ## Operational Notes
 

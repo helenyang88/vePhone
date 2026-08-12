@@ -1,4 +1,4 @@
-from mua_platform.pods.streaming import _session_result
+from cua_platform.pods.streaming import _session_result
 
 
 def test_stream_session_accepts_top_level_novnc_response():

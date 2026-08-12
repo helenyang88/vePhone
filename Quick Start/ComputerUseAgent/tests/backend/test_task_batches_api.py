@@ -1,12 +1,12 @@
 from sqlalchemy import func, select
 
-from mua_platform.tasks.models import (
+from cua_platform.tasks.models import (
     PodLease,
     Task,
     TaskBatch,
     TaskRunnerConfig,
 )
-from mua_platform.test_plans.models import PlanExecution
+from cua_platform.test_plans.models import PlanExecution
 
 
 def _create_case(client, title: str) -> str:

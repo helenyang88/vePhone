@@ -2,10 +2,10 @@ import os
 from dataclasses import replace
 from datetime import UTC, datetime
 
-from mua_platform.main import create_app
-from mua_platform.pods.models import DiscoveredPod
-from mua_platform.runners.base import PollResult, RunRequest, RunnerEvent
-from mua_platform.runners.mock import MockRunner
+from cua_platform.main import create_app
+from cua_platform.pods.models import DiscoveredPod
+from cua_platform.runners.base import PollResult, RunRequest, RunnerEvent
+from cua_platform.runners.mock import MockRunner
 
 if os.environ.get("APP_ENV") != "e2e":
     raise RuntimeError("test_plan_server_requires_e2e_environment")

@@ -10,21 +10,21 @@ from types import SimpleNamespace
 
 import pytest
 
-from mua_platform.runners.base import (
+from cua_platform.runners.base import (
     CancelResult,
     PollResult,
     RunHandle,
     RunRequest,
     RunnerEvent,
 )
-from mua_platform.runners.mobile_use import MobileUseRunner
-from mua_platform.runners.universal_gateway import (
+from cua_platform.runners.mobile_use import MobileUseRunner
+from cua_platform.runners.universal_gateway import (
     RemoteRun,
     UniversalGateway,
     UniversalRequest,
     call_universal,
 )
-from mua_platform.settings.schemas import RunnerConfig
+from cua_platform.settings.schemas import RunnerConfig
 
 
 FIXTURE_DIR = Path(__file__).parent / "fixtures" / "mobile_use"
@@ -377,7 +377,7 @@ async def test_list_agent_run_task_active_statuses_keep_polling(
         request_loader=lambda _task_id: request,
     )
 
-    with caplog.at_level(logging.INFO, logger="mua_platform.mobile_use"):
+    with caplog.at_level(logging.INFO, logger="cua_platform.mobile_use"):
         page = await runner.poll(
             RunHandle(request.task_id, "mobile_use", "run-sanitized"),
             after_sequence=0,

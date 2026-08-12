@@ -1,4 +1,4 @@
-from mua_platform.api import novnc
+from cua_platform.api import novnc
 
 
 def test_novnc_proxy_view_sets_same_origin_session_cookie(authenticated_client, monkeypatch):

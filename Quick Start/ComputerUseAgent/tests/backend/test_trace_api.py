@@ -2,12 +2,12 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from mua_platform.cases.models import TestCase as CaseModel
-from mua_platform.tasks.models import Task, TaskEvent
-from mua_platform.tasks.state_machine import ExecutionStatus, Verdict
-from mua_platform.traces.repository import TraceRepository
-from mua_platform.traces.schemas import TraceSpanDraft
-from mua_platform.traces.service import TraceService
+from cua_platform.cases.models import TestCase as CaseModel
+from cua_platform.tasks.models import Task, TaskEvent
+from cua_platform.tasks.state_machine import ExecutionStatus, Verdict
+from cua_platform.traces.repository import TraceRepository
+from cua_platform.traces.schemas import TraceSpanDraft
+from cua_platform.traces.service import TraceService
 
 NOW = datetime(2026, 7, 26, 8, 0, tzinfo=UTC)
 

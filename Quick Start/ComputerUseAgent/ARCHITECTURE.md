@@ -69,8 +69,8 @@ The frontend does not store real credentials. Secret inputs are write-only.
 
 ## Backend Layers
 
-The backend lives in `src/mua_platform/`. The package name is kept for source
-compatibility, but the public product behavior is Computer Use Agent based.
+The backend lives in `src/cua_platform/`. The public product behavior is
+Computer Use Agent based.
 
 - `main.py`: app factory, lifespan, routers, worker startup, health checks, and
   SPA serving.

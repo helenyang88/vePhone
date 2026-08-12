@@ -4,16 +4,16 @@ import pytest
 from sqlalchemy import create_engine, func, select
 from sqlalchemy.orm import Session
 
-from mua_platform.db import Base
-from mua_platform.runners.base import RunnerEvent
-from mua_platform.runners.universal_gateway import GatewayTraceAttempt
-from mua_platform.tasks.models import Task
-from mua_platform.tasks.repository import SQLiteTaskRepository
-from mua_platform.tasks.state_machine import ExecutionStatus, Verdict
-from mua_platform.traces.models import TaskTraceSpan
-from mua_platform.traces.repository import TraceRepository
-from mua_platform.traces.schemas import TraceSpanDraft
-from mua_platform.traces.service import TraceService
+from cua_platform.db import Base
+from cua_platform.runners.base import RunnerEvent
+from cua_platform.runners.universal_gateway import GatewayTraceAttempt
+from cua_platform.tasks.models import Task
+from cua_platform.tasks.repository import SQLiteTaskRepository
+from cua_platform.tasks.state_machine import ExecutionStatus, Verdict
+from cua_platform.traces.models import TaskTraceSpan
+from cua_platform.traces.repository import TraceRepository
+from cua_platform.traces.schemas import TraceSpanDraft
+from cua_platform.traces.service import TraceService
 
 NOW = datetime(2026, 7, 26, 8, 0, tzinfo=UTC)
 

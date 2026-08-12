@@ -8,8 +8,8 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import text
 
-from mua_platform.pods.schemas import ListPodPage
-from mua_platform.runners.universal_gateway import UniversalRemoteError
+from cua_platform.pods.schemas import ListPodPage
+from cua_platform.runners.universal_gateway import UniversalRemoteError
 
 
 COMPUTER_USE_CONFIG = {

@@ -1,9 +1,9 @@
 import os
 from pathlib import Path
 
-from mua_platform.diagnostics.mobile_use import RemotePodResult, RemoteProbeResult
-from mua_platform.main import create_app
-from mua_platform.pods.schemas import ListPodPage, PodSummary
+from cua_platform.diagnostics.mobile_use import RemotePodResult, RemoteProbeResult
+from cua_platform.main import create_app
+from cua_platform.pods.schemas import ListPodPage, PodSummary
 
 if os.environ.get("APP_ENV") != "e2e":
     raise RuntimeError("diagnostics_server_requires_e2e_environment")

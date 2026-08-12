@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from mua_platform.config import Settings
+from cua_platform.config import Settings
 
 
 @pytest.mark.parametrize(

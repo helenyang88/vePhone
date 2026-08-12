@@ -4,17 +4,17 @@ from datetime import datetime
 
 import pytest
 
-from mua_platform.diagnostics.mobile_use import (
+from cua_platform.diagnostics.mobile_use import (
     CallableMobileUseDiagnosticGateway,
     MobileUseDiagnosticAdapter,
     RemotePodResult,
     RemoteProbeResult,
 )
-from mua_platform.diagnostics.schemas import PodDiagnostic, ValidationCheck
-from mua_platform.diagnostics.service import DiagnosticsService
-from mua_platform.runners.mock import MockRunner
-from mua_platform.settings.schemas import RunnerConfig
-from mua_platform.time import FakeClock
+from cua_platform.diagnostics.schemas import PodDiagnostic, ValidationCheck
+from cua_platform.diagnostics.service import DiagnosticsService
+from cua_platform.runners.mock import MockRunner
+from cua_platform.settings.schemas import RunnerConfig
+from cua_platform.time import FakeClock
 
 
 @pytest.mark.asyncio

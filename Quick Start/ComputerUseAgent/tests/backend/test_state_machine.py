@@ -1,6 +1,6 @@
 import pytest
 
-from mua_platform.tasks.state_machine import (
+from cua_platform.tasks.state_machine import (
     ExecutionStatus,
     Verdict,
     derive_verdict,

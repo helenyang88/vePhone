@@ -5,12 +5,12 @@ import pytest
 from pydantic import ValidationError
 from sqlalchemy import event, select
 
-from mua_platform.cases.models import TestCase as CaseModel
-from mua_platform.db import _TAG_COLOR_CANDIDATES
-from mua_platform.tasks.models import Task, TaskBatch
-from mua_platform.tasks.state_machine import ExecutionStatus, Verdict
-from mua_platform.test_plans.models import PlanExecution, TagColorRegistry
-from mua_platform.test_plans.schemas import TestPlanWrite as PlanWrite
+from cua_platform.cases.models import TestCase as CaseModel
+from cua_platform.db import _TAG_COLOR_CANDIDATES
+from cua_platform.tasks.models import Task, TaskBatch
+from cua_platform.tasks.state_machine import ExecutionStatus, Verdict
+from cua_platform.test_plans.models import PlanExecution, TagColorRegistry
+from cua_platform.test_plans.schemas import TestPlanWrite as PlanWrite
 
 
 @pytest.fixture()
@@ -358,7 +358,7 @@ def test_plan_list_filters_and_lists_creators(authenticated_client):
         case_ids=[case_id],
     )
     with authenticated_client.app.state.session_factory() as db:
-        from mua_platform.test_plans.models import TestPlan
+        from cua_platform.test_plans.models import TestPlan
 
         alice = db.get(TestPlan, alice_plan["id"])
         deleted = db.get(TestPlan, deleted_plan["id"])
@@ -393,7 +393,7 @@ def test_plan_list_treats_blank_test_type_as_regression(authenticated_client):
         test_type="regression",
     )
     with authenticated_client.app.state.session_factory() as db:
-        from mua_platform.test_plans.models import TestPlan
+        from cua_platform.test_plans.models import TestPlan
 
         plan = db.get(TestPlan, matched["id"])
         assert plan is not None
@@ -1124,7 +1124,7 @@ def test_plan_records_are_soft_deleted_in_database(authenticated_client):
     authenticated_client.delete(f"/api/v1/test-plans/{plan['id']}")
 
     with authenticated_client.app.state.session_factory() as db:
-        from mua_platform.test_plans.models import TestPlan
+        from cua_platform.test_plans.models import TestPlan
 
         stored = db.scalar(
             select(TestPlan).where(TestPlan.id == plan["id"])

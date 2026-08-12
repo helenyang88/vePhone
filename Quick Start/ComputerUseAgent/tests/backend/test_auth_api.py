@@ -2,8 +2,8 @@ from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import event, inspect, select
 
-from mua_platform.auth.models import AuthSession, User
-from mua_platform.auth.service import AuthService
+from cua_platform.auth.models import AuthSession, User
+from cua_platform.auth.service import AuthService
 
 
 def test_admin_setup_login_and_session_cookie(client):

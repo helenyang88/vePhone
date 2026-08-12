@@ -1,7 +1,7 @@
 from types import SimpleNamespace
 
-from mua_platform.tasks.models import Task, TaskRunnerConfig
-from mua_platform.tasks.state_machine import ExecutionStatus
+from cua_platform.tasks.models import Task, TaskRunnerConfig
+from cua_platform.tasks.state_machine import ExecutionStatus
 
 
 def _create_case(client, title: str) -> str:
@@ -115,7 +115,7 @@ def test_runtime_skips_thread_detail_while_task_is_running(
 
     gateway = RecordingRuntimeGateway()
     monkeypatch.setattr(
-        "mua_platform.api.tasks.UniversalGateway",
+        "cua_platform.api.tasks.UniversalGateway",
         lambda: gateway,
     )
 
@@ -173,7 +173,7 @@ def test_runtime_current_step_only_skips_result_and_thread_queries(
 
     gateway = RecordingRuntimeGateway()
     monkeypatch.setattr(
-        "mua_platform.api.tasks.UniversalGateway",
+        "cua_platform.api.tasks.UniversalGateway",
         lambda: gateway,
     )
 

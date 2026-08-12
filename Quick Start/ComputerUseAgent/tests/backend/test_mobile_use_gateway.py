@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, call
 import pytest
 from fastapi.encoders import jsonable_encoder
 
-from mua_platform.runners.universal_gateway import (
+from cua_platform.runners.universal_gateway import (
     GatewayTraceAttempt,
     RemoteCancel,
     RemoteResultResponse,
@@ -20,7 +20,7 @@ from mua_platform.runners.universal_gateway import (
     call_universal,
     safe_universal_error,
 )
-from mua_platform.settings.schemas import RunnerConfig
+from cua_platform.settings.schemas import RunnerConfig
 
 
 ACCESS_KEY = "AKLT-test-sensitive"

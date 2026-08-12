@@ -1,6 +1,6 @@
 import pytest
 
-from mua_platform.settings.schemas import RunnerConfig, RunnerExecutionSettingsError
+from cua_platform.settings.schemas import RunnerConfig, RunnerExecutionSettingsError
 
 
 def test_cua_execution_snapshot_requires_account_not_product_or_tos():

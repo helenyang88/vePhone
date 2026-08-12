@@ -3,8 +3,8 @@ import logging
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from mua_platform.config import Settings
-from mua_platform.main import create_app
+from cua_platform.config import Settings
+from cua_platform.main import create_app
 
 
 def assert_error_envelope(response, code: str) -> dict:
@@ -70,14 +70,14 @@ def test_unknown_exception_is_logged_without_sensitive_message(
     _add_crashing_route(app)
 
     with (
-        caplog.at_level(logging.ERROR, logger="mua_platform.errors"),
+        caplog.at_level(logging.ERROR, logger="cua_platform.errors"),
         TestClient(app, raise_server_exceptions=False) as client,
     ):
         response = client.get("/_test/crash/path-sensitive-value")
 
     error = assert_error_envelope(response, "internal_server_error")
     assert response.status_code == 500
-    record = next(record for record in caplog.records if record.name == "mua_platform.errors")
+    record = next(record for record in caplog.records if record.name == "cua_platform.errors")
     assert record.request_id == error["request_id"]
     assert record.method == "GET"
     assert record.path == "/_test/crash/{secret}"

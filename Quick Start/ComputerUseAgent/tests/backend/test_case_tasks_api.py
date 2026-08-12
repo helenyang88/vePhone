@@ -5,18 +5,18 @@ from zoneinfo import ZoneInfo
 import pytest
 from sqlalchemy import func, select
 
-from mua_platform.cases.models import TestCase as CaseModel
-from mua_platform.pods.repository import PodRepository
-from mua_platform.pods.schemas import ListPodPage, PodDetail, PodSummary
-from mua_platform.runners.base import CancelResult, PollResult, RunHandle, RunnerEvent
-from mua_platform.runners.mock import MockRunner
-from mua_platform.tasks.models import Task, TaskEvent
-from mua_platform.tasks.repository import SQLiteTaskRepository
-from mua_platform.tasks.service import TaskService
-from mua_platform.tasks.state_machine import ExecutionStatus, Verdict
-from mua_platform.time import FakeClock
-from mua_platform.test_plans.models import TagColorRegistry
-from mua_platform.test_plans.service import (
+from cua_platform.cases.models import TestCase as CaseModel
+from cua_platform.pods.repository import PodRepository
+from cua_platform.pods.schemas import ListPodPage, PodDetail, PodSummary
+from cua_platform.runners.base import CancelResult, PollResult, RunHandle, RunnerEvent
+from cua_platform.runners.mock import MockRunner
+from cua_platform.tasks.models import Task, TaskEvent
+from cua_platform.tasks.repository import SQLiteTaskRepository
+from cua_platform.tasks.service import TaskService
+from cua_platform.tasks.state_machine import ExecutionStatus, Verdict
+from cua_platform.time import FakeClock
+from cua_platform.test_plans.models import TagColorRegistry
+from cua_platform.test_plans.service import (
     TagColorRegistryExhaustedError,
     TagColorService,
 )
@@ -128,7 +128,7 @@ def test_list_cases_tag_filter_matches_when_case_contains_tag(authenticated_clie
 
 def test_list_case_creators_returns_distinct_active_creators(authenticated_client):
     with authenticated_client.app.state.session_factory() as db:
-        from mua_platform.cases.models import TestCase
+        from cua_platform.cases.models import TestCase
 
         db.add_all([
             TestCase(
@@ -514,7 +514,7 @@ def test_case_stats_aggregate_all_cases(authenticated_client):
     )
     _seed_task(authenticated_client, second_case_id, "second-queued")
     with authenticated_client.app.state.session_factory() as db:
-        from mua_platform.cases.models import TestCase
+        from cua_platform.cases.models import TestCase
 
         shanghai_now = datetime.now(ZoneInfo("Asia/Shanghai"))
         today_start = shanghai_now.replace(
@@ -583,7 +583,7 @@ def test_case_statistics_are_derived_from_terminal_tasks(authenticated_client):
     )
     expected_latest = datetime(2026, 1, 2, 12, tzinfo=UTC)
     with authenticated_client.app.state.session_factory() as db:
-        from mua_platform.cases.models import TestCase
+        from cua_platform.cases.models import TestCase
 
         case = db.get(TestCase, case_id)
         assert case is not None
@@ -665,7 +665,7 @@ async def test_runner_task_cancelled_event_finishes_task_as_cancelled(
             idempotency_key="remote-cancelled",
             runner_type="mock",
         ).task.id
-        with caplog.at_level(logging.INFO, logger="mua_platform.tasks"):
+        with caplog.at_level(logging.INFO, logger="cua_platform.tasks"):
             completed = await TaskService(
                 repository,
                 runner=CancellingRunner(),
@@ -743,7 +743,7 @@ def test_completed_task_does_not_write_case_stat_cache(
     }
 
     with authenticated_client.app.state.session_factory() as db:
-        from mua_platform.cases.models import TestCase
+        from cua_platform.cases.models import TestCase
 
         case = db.get(TestCase, case_id)
         assert case is not None
@@ -769,7 +769,7 @@ def test_copy_case_creates_independent_reset_copy_for_current_user(
 ):
     case_id = _create_case(authenticated_client, "登录核心链路")
     with authenticated_client.app.state.session_factory() as db:
-        from mua_platform.cases.models import TestCase
+        from cua_platform.cases.models import TestCase
 
         source = db.get(TestCase, case_id)
         assert source is not None
@@ -867,7 +867,7 @@ def test_batch_delete_cases_returns_per_case_results(authenticated_client):
     bound_id = _create_case(authenticated_client, "已绑定计划")
     _seed_task(authenticated_client, with_task_id, "batch-delete-task")
     with authenticated_client.app.state.session_factory() as db:
-        from mua_platform.test_plans.models import TestPlan, TestPlanCase
+        from cua_platform.test_plans.models import TestPlan, TestPlanCase
 
         plan = TestPlan(
             id="plan_batch_delete",

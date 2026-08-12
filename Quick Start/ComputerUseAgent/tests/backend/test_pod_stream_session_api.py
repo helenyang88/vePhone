@@ -1,6 +1,6 @@
 from datetime import UTC, datetime
 
-from mua_platform.pods.models import DiscoveredPod
+from cua_platform.pods.models import DiscoveredPod
 
 
 COMPUTER_USE_STREAM_CONFIG = {

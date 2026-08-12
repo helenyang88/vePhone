@@ -12,9 +12,9 @@ if "APP_DATA_DIR" not in os.environ:
     _test_data_dir = tempfile.TemporaryDirectory(prefix="mua-platform-tests-")
     os.environ["APP_DATA_DIR"] = _test_data_dir.name
 
-from mua_platform.config import Settings  # noqa: E402
-from mua_platform.main import app, create_app  # noqa: E402
-from mua_platform.pods.schemas import ListPodPage  # noqa: E402
+from cua_platform.config import Settings  # noqa: E402
+from cua_platform.main import app, create_app  # noqa: E402
+from cua_platform.pods.schemas import ListPodPage  # noqa: E402
 
 
 class EmptyPodGateway:

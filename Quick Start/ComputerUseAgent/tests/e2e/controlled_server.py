@@ -3,9 +3,9 @@ import os
 from dataclasses import replace
 from pathlib import Path
 
-from mua_platform.main import create_app
-from mua_platform.runners.base import PollResult, RunnerEvent
-from mua_platform.runners.mock import MockRunner
+from cua_platform.main import create_app
+from cua_platform.runners.base import PollResult, RunnerEvent
+from cua_platform.runners.mock import MockRunner
 
 
 class ControlledRunner(MockRunner):
