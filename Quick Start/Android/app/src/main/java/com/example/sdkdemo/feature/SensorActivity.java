@@ -5,16 +5,16 @@ import android.util.Log;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowManager;
-import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.widget.LinearLayoutCompat;
 import androidx.appcompat.widget.SwitchCompat;
 
+import com.example.sdkdemo.AppSettings;
 import com.example.sdkdemo.R;
-import com.example.sdkdemo.util.ScreenUtil;
 import com.example.sdkdemo.base.BasePlayActivity;
+import com.example.sdkdemo.util.ScreenUtil;
 import com.example.sdkdemo.util.SdkUtil;
 import com.volcengine.cloudphone.apiservice.SensorService;
 import com.volcengine.phone.PhonePlayConfig;
@@ -64,82 +64,88 @@ public class SensorActivity extends BasePlayActivity {
         });
 
         mSwEnableMagnetic.setOnCheckedChangeListener((buttonView, isChecked) -> {
-            /**
+            /*
              * enableMagneticSensor(boolean enable) -- 本地磁力传感器开关
              */
             VePhoneEngine.getInstance().enableMagneticSensor(isChecked);
-            Toast.makeText(SensorActivity.this, "本地磁力传感器" + (isChecked ? "已开启" : "已关闭"), Toast.LENGTH_SHORT).show();
+            showToast("本地磁力传感器" + (isChecked ? "已开启" : "已关闭"));
         });
 
         mSwEnableAccelerator.setOnCheckedChangeListener((buttonView, isChecked) -> {
-            /**
+            /*
              * enableAccelSensor(boolean enable) -- 本地加速度传感器开关
              */
             VePhoneEngine.getInstance().enableAccelSensor(isChecked);
-            Toast.makeText(SensorActivity.this, "本地加速度传感器" + (isChecked ? "已开启" : "已关闭"), Toast.LENGTH_SHORT).show();
+            showToast("本地加速度传感器" + (isChecked ? "已开启" : "已关闭"));
         });
 
         mSwEnableGravity.setOnCheckedChangeListener((buttonView, isChecked) -> {
-            /**
+            /*
              * enableGravitySensor(boolean enable) -- 本地重力传感器开关
              */
             VePhoneEngine.getInstance().enableGravitySensor(isChecked);
-            Toast.makeText(SensorActivity.this, "本地重力传感器" + (isChecked ? "已开启" : "已关闭"), Toast.LENGTH_SHORT).show();
+            showToast("本地重力传感器" + (isChecked ? "已开启" : "已关闭"));
         });
 
         mSwEnableOrientation.setOnCheckedChangeListener((buttonView, isChecked) -> {
-            /**
+            /*
              * enableOrientationSensor(boolean enable) -- 本地方向传感器开关
              */
             VePhoneEngine.getInstance().enableOrientationSensor(isChecked);
-            Toast.makeText(SensorActivity.this, "本地方向传感器" + (isChecked ? "已开启" : "已关闭"), Toast.LENGTH_SHORT).show();
+            showToast("本地方向传感器" + (isChecked ? "已开启" : "已关闭"));
         });
 
         mSwEnableGyroscope.setOnCheckedChangeListener((buttonView, isChecked) -> {
-            /**
+            /*
              * enableGyroscopeSensor(boolean enable) -- 本地陀螺仪传感器开关
              */
             VePhoneEngine.getInstance().enableGyroscopeSensor(isChecked);
-            Toast.makeText(SensorActivity.this, "本地陀螺仪传感器" + (isChecked ? "已开启" : "已关闭"), Toast.LENGTH_SHORT).show();
+            showToast("本地陀螺仪传感器" + (isChecked ? "已开启" : "已关闭"));
         });
 
         mSwEnableVibrator.setOnCheckedChangeListener((buttonView, isChecked) -> {
-            /**
+            /*
              * enableVibrator(boolean enable) -- 本地振动传感器开关
              */
             VePhoneEngine.getInstance().enableVibrator(isChecked);
-            Toast.makeText(SensorActivity.this, "本地振动传感器" + (isChecked ? "已开启" : "已关闭"), Toast.LENGTH_SHORT).show();
+
+            showToast("本地振动传感器" + (isChecked ? "已开启" : "已关闭"));
         });
     }
 
     private void initPlayConfigAndStartPlay() {
-        SdkUtil.PlayAuth auth = SdkUtil.getPlayAuth(this);
-        SdkUtil.checkPlayAuth(auth,
+        SdkUtil.checkPlayAuth(
+                SdkUtil.getPlayAuth(this),
                 p -> {
-                    PhonePlayConfig.Builder builder = new PhonePlayConfig.Builder();
-                    builder.userId(SdkUtil.getClientUid())
-                            .ak(auth.ak)
-                            .sk(auth.sk)
-                            .token(auth.token)
-                            .container(mContainer)
-                            .enableLocalKeyboard(true)
-                            .enableGyroscopeSensor(false)
-                            .enableGravitySensor(false)
-                            .enableAccSensor(false)
-                            .enableOrientationSensor(false)
-                            .enableMagneticSensor(false)
-                            .enableLocationService(true)
-                            .setLightSensorState(true)
-                            .setProximitySensorState(false)
-                            .roundId(SdkUtil.getRoundId())
-                            .podId(auth.podId)
-                            .productId(auth.productId)
-                            .streamListener(this);
-                    VePhoneEngine.getInstance().start(builder.build(), this);
+                    VePhoneEngine.getInstance().start(buildPhonePlayConfig(p, mContainer), this);
                 },
                 p -> {
-                    showTipDialog(MessageFormat.format(getString(R.string.invalid_phone_play_config) , p));
+                    showTipDialog(MessageFormat.format(getString(R.string.invalid_phone_play_config), p));
                 });
+    }
+
+    @NonNull
+    @Override
+    protected PhonePlayConfig buildPhonePlayConfig(@NonNull SdkUtil.PlayAuth auth, @Nullable ViewGroup container) {
+        return new PhonePlayConfig.Builder().ak(auth.ak)
+                .sk(auth.sk)
+                .token(auth.token)
+                .container(container)
+                .podId(auth.podId)
+                .productId(auth.productId)
+                .enableLocalKeyboard(AppSettings.ENABLE_LOCAL_KEYBOARD)
+                .remoteWindowSize(AppSettings.ENABLE_FULL_SCREEN ? -1 : 0, AppSettings.ENABLE_FULL_SCREEN ? -1 : 0)
+                .streamListener(this)
+                // 各种传感器数据同步开关，默认都是关闭的，按需开启
+                .enableGyroscopeSensor(false)
+                .enableGravitySensor(false)
+                .enableAccSensor(false)
+                .enableOrientationSensor(false)
+                .enableMagneticSensor(false)
+                .enableLocationService(true)
+                .enableLightSensor(true)  // setLightSensorState作用相同
+                .enableProximitySensor(false)  //setProximitySensorState作用相同
+                .build();
     }
 
     @Override
@@ -167,9 +173,6 @@ public class SensorActivity extends BasePlayActivity {
         super.finish();
     }
 
-    /**
-     * 加入房间前回调，用于获取并初始化各个功能服务，例如设置各种事件监听回调。
-     */
     @Override
     public void onServiceInit(@NonNull Map<String, Object> extras) {
         super.onServiceInit(extras);

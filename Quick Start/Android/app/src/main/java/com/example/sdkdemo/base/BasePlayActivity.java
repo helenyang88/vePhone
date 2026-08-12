@@ -1,21 +1,23 @@
 package com.example.sdkdemo.base;
 
 
+import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.DialogInterface;
-import android.content.pm.ActivityInfo;
 import android.content.res.Configuration;
-import android.os.Bundle;
 import android.util.Log;
 import android.view.View;
+import android.view.ViewGroup;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 
+import com.example.sdkdemo.AppSettings;
 import com.example.sdkdemo.R;
 import com.example.sdkdemo.feature.MessageChannelActivity;
+import com.example.sdkdemo.util.SdkUtil;
 import com.volcengine.androidcloud.common.model.RotationState;
 import com.volcengine.androidcloud.common.model.StreamStats;
 import com.volcengine.androidcloud.common.pod.Rotation;
@@ -25,6 +27,7 @@ import com.volcengine.cloudcore.common.mode.StreamType;
 import com.volcengine.cloudphone.apiservice.outinterface.IPlayerListener;
 import com.volcengine.cloudphone.apiservice.outinterface.IStreamListener;
 import com.volcengine.common.SDKContext;
+import com.volcengine.phone.PhonePlayConfig;
 import com.volcengine.phone.VePhoneEngine;
 
 import java.text.MessageFormat;
@@ -44,39 +47,19 @@ public class BasePlayActivity extends AppCompatActivity implements IPlayerListen
         VePhoneEngine.getInstance().rotate(newConfig.orientation);
     }
 
-    /**
-     * 调整Activity的显示方向
-     *
-     * @param rotation 旋转方向
-     *                 0/180  -- 将Activity调整为竖屏显示
-     *                 90/270 -- 将Activity调整为横屏显示
-     */
-    protected void setRotation(int rotation) {
-        switch (rotation) {
-            case 0:
-            case 180:
-                setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT);
-                break;
-            case 90:
-            case 270:
-                setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
-                break;
-        }
-    }
-
     @Override
     public void onBackPressed() {
         long current = System.currentTimeMillis();
         if (current - lastBackPress < 1000L) {
             super.onBackPressed();
         } else {
-            Toast.makeText(this, getString(R.string.back_again_to_exit), Toast.LENGTH_SHORT).show();
+            showToast(getString(R.string.back_again_to_exit));
             lastBackPress = current;
         }
     }
 
     protected void showToast(String s) {
-        Toast.makeText(this, s, Toast.LENGTH_SHORT).show();
+        Toast.makeText(getApplicationContext(), s, Toast.LENGTH_SHORT).show();
     }
 
     /**
@@ -220,7 +203,6 @@ public class BasePlayActivity extends AppCompatActivity implements IPlayerListen
      */
     @Override
     public void onLocalStreamStats(LocalStreamStats stats) {
-        Log.d(TAG, "[onLocalStreamStats] stats: " + stats);
     }
 
     /**
@@ -255,7 +237,7 @@ public class BasePlayActivity extends AppCompatActivity implements IPlayerListen
      * 客户端的旋转回调
      *
      * 远端实例通过该回调向客户端发送视频流的方向(横屏或竖屏)，为保证视频流方向与Activity方向一致，
-     * 需要在该回调中根据rotation参数，调用 {@link BasePlayActivity#setRotation(int)} 来调整Activity的方向，
+     * 需要在该回调中根据rotation参数，调用 {@link RotationState#applyRotation(int, Activity)} 来调整Activity的方向，
      * 0/180需将Activity调整为竖屏，90/270则将Activity调整为横屏；
      * 同时，需要在 {@link MessageChannelActivity#onConfigurationChanged(Configuration)} 回调中，
      * 根据当前Activity的方向，调用 {@link VePhoneEngine#rotate(int)} 来调整视频流的方向。
@@ -269,7 +251,7 @@ public class BasePlayActivity extends AppCompatActivity implements IPlayerListen
         Log.d(TAG, "[onRotation]: " + state.rotation + ", mode:" + state.mode);
         if (state.mode == Rotation.AUTO_ROTATION) {
             // 自动旋转模式：对应启动时{builder.rotation(Rotation.AUTO_ROTATION)}
-            setRotation(state.rotation);
+            RotationState.applyRotation(state.rotation, this);
             // 解决横屏状态下container方向不对的问题
             VePhoneEngine.getInstance().rotate(Rotation.from(state.rotation).orientation);
         } else {
@@ -277,7 +259,7 @@ public class BasePlayActivity extends AppCompatActivity implements IPlayerListen
             // 推荐使用SDK内部旋转方案，参考：{builder.videoRotationMode()}及{RotationModeActivity}
             Rotation displayRotation = SDKContext.getDisplayRotation();
             if (state.mode != displayRotation) {
-                setRotation(state.mode.toRotation());
+                RotationState.applyRotation(state.mode.toRotation(), this);
                 VePhoneEngine.getInstance().rotate(Rotation.from(state.rotation).orientation);
             }
         }
@@ -314,18 +296,16 @@ public class BasePlayActivity extends AppCompatActivity implements IPlayerListen
         Log.d(TAG, "[onNetworkQuality] quality: " + quality);
     }
 
-
     protected void showTipDialog(String message) {
+        showTipDialog(message, (dialog, which) -> finish());
+    }
+
+    protected void showTipDialog(String message, DialogInterface.OnClickListener positiveListener) {
         new AlertDialog.Builder(this)
                 .setCancelable(false)
                 .setTitle("提示")
                 .setMessage(message)
-                .setPositiveButton("OK", new DialogInterface.OnClickListener() {
-                    @Override
-                    public void onClick(DialogInterface dialog, int which) {
-                        finish();
-                    }
-                })
+                .setPositiveButton("OK", positiveListener)
                 .show();
     }
 
@@ -335,6 +315,23 @@ public class BasePlayActivity extends AppCompatActivity implements IPlayerListen
         if (loadingUI == null) {
             loadingUI = findViewById(R.id.progress_bar);
         }
-        loadingUI.setVisibility(visible ? View.VISIBLE : View.GONE);
+        if (loadingUI != null) {
+            loadingUI.setVisibility(visible ? View.VISIBLE : View.GONE);
+        }
+    }
+
+
+    protected @NonNull PhonePlayConfig buildPhonePlayConfig(@NonNull SdkUtil.PlayAuth auth, @Nullable ViewGroup container) {
+        return new PhonePlayConfig.Builder().ak(auth.ak)
+                .sk(auth.sk)
+                .token(auth.token)
+                .container(container)
+                .podId(auth.podId)
+                .productId(auth.productId)
+                .enableLocalKeyboard(AppSettings.ENABLE_LOCAL_KEYBOARD)
+                .autoRecycleTime(AppSettings.AUTO_RECYCLE_TIME)
+                .remoteWindowSize(AppSettings.ENABLE_FULL_SCREEN ? -1 : 0, AppSettings.ENABLE_FULL_SCREEN ? -1 : 0)
+                .streamListener(this)
+                .build();
     }
 }

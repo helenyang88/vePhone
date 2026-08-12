@@ -19,6 +19,14 @@
 |MobileUse |[下载]( https://www.volcengine.com/docs/6394/1783697) |[文档]( https://www.volcengine.com/docs/6394/1783697) |[文档]( https://www.volcengine.com/docs/6394/1953040) |
 |Computer Use Agent |— |[下载]( https://docs.volcengine.com/docs/6394/2548051) |[文档]( https://docs.volcengine.com/docs/6394/2558649) |
 
+# Mobile Use Agent 接入请参考
+
+方案介绍： https://www.volcengine.com/docs/6394/1583515?lang=zh&_vtm_=0.0.c7956061.d48218.0
+Open API接口文档：https://www.volcengine.com/docs/6394/1953040?lang=zh
+Skill 获取：
+[find skill](https://findskill.com/volcengine/ACEP/volcengine-ACEP-mobile_use)
+[clawhub](https://clawhub.ai/volcengine-skills/byted-ai-mobileuse-agent)
+
 ## Quick Start 目录
 
 - `Quick Start/MobileUse/ui_test_demo/`：Mobile Use 测试平台示例，包含用例、测试计划、任务执行、设备池和结果报告。
@@ -28,6 +36,12 @@ Computer Use Agent 参考文档：
 
 - [使用指南](https://docs.volcengine.com/docs/6394/2548051?lang=zh)
 - [OpenAPI 概览](https://docs.volcengine.com/docs/6394/2558649?lang=zh)
+
+## Security and privacy
+
+This project takes security seriously.
+
+For vulnerability reporting and supported versions, see [SECURITY.md](SECURITY.md).
 
 ## 联系我们
 

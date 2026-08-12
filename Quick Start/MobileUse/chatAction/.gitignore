@@ -1,0 +1,9 @@
+.env
+artifacts/
+__pycache__/
+*.pyc
+*.pem
+*.key
+adbkey*
+id_rsa*
+jerry
