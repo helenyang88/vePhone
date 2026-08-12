@@ -17,7 +17,7 @@
 |Web/H5 |[下载]( https://www.volcengine.com/docs/6394/75741) |[文档]( https://www.volcengine.com/docs/6394/75744) |[文档]( https://www.volcengine.com/docs/6394/75747) |
 |Windows |[下载]( https://www.volcengine.com/docs/6394/75741) |[文档]( https://www.volcengine.com/docs/6394/1156707) |[文档]( https://www.volcengine.com/docs/6394/75747) |
 |MobileUse |[下载]( https://www.volcengine.com/docs/6394/1783697) |[文档]( https://www.volcengine.com/docs/6394/1783697) |[文档]( https://www.volcengine.com/docs/6394/1953040) |
-|Computer Use Agent |— |[使用指南]( https://docs.volcengine.com/docs/6394/2548051?lang=zh) |[OpenAPI 概览]( https://docs.volcengine.com/docs/6394/2558649?lang=zh) |
+|Computer Use Agent |— |[下载]( https://docs.volcengine.com/docs/6394/2548051) |[文档]( https://docs.volcengine.com/docs/6394/2558649) |
 
 ## Quick Start 目录
 
