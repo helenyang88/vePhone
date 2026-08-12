@@ -1,0 +1,31 @@
+{
+  "ResponseMetadata": {
+    "RequestId": "req-result-fail",
+    "Action": "GetAgentResult",
+    "Version": "2023-08-01",
+    "Service": "ipaas",
+    "Region": "cn-north-1"
+  },
+  "Result": {
+    "IsSuccess": 1,
+    "Content": "任务执行完成\n{\"status\":\"fail\",\"reason\":\"首页断言失败\",\"steps\":[{\"index\":1,\"status\":\"failed\",\"log\":\"未找到首页标题\"}],\"assertions\":[{\"index\":1,\"result\":\"fail\",\"evidence\":[\"页面未出现首页\"]}],\"evidence\":[\"截图缺少首页标题\"]}",
+    "StructOutput": null,
+    "ScreenShots": {
+      "1": {
+        "screenshot": "https://example.invalid/sanitized-fail.png",
+        "original_dimensions": [
+          720,
+          1520
+        ],
+        "screenshot_dimensions": [
+          720,
+          1520
+        ]
+      }
+    },
+    "Usage": {
+      "in_tokens": "234",
+      "out_tokens": 56
+    }
+  }
+}

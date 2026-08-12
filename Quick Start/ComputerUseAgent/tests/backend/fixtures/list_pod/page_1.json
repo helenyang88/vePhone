@@ -1,0 +1,24 @@
+{
+  "ResponseMetadata": {
+    "RequestId": "req-list-page-1"
+  },
+  "Result": {
+    "Row": [
+      {
+        "ProductId": "product-1",
+        "PodId": "pod-1",
+        "PodName": "alpha",
+        "Online": 1,
+        "Status": "Running"
+      },
+      {
+        "ProductId": "product-1",
+        "PodId": "pod-2",
+        "PodName": "beta",
+        "Online": 0,
+        "Status": "Offline"
+      }
+    ],
+    "Total": 3
+  }
+}
