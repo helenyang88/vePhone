@@ -5,6 +5,7 @@ from sqlalchemy import exists, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
+from mua_platform.business.models import DEFAULT_BUSINESS_ID
 from mua_platform.cases.models import TestCase
 from mua_platform.db import _unused_tag_color
 from mua_platform.tasks.models import Task, TaskBatch
@@ -163,11 +164,13 @@ class TestPlanService:
         self,
         payload: TestPlanWrite,
         created_by: str,
+        business_id: str = DEFAULT_BUSINESS_ID,
     ) -> TestPlan:
-        cases = self._require_cases(payload.case_ids)
-        self._require_available_name(payload.name)
+        cases = self._require_cases(payload.case_ids, business_id)
+        self._require_available_name(payload.name, business_id=business_id)
         plan = TestPlan(
             id=f"plan_{uuid4().hex}",
+            business_id=business_id,
             name=payload.name,
             name_key=payload.name.casefold(),
             description=payload.description,
@@ -186,7 +189,7 @@ class TestPlanService:
             TagColorService(self.db).ensure(payload.tags)
             self.db.add(plan)
             self.db.commit()
-            return self._required(plan.id)
+            return self._required(plan.id, business_id)
         except IntegrityError as exc:
             self.db.rollback()
             raise TestPlanNameConflictError(
@@ -200,12 +203,17 @@ class TestPlanService:
         self,
         plan_id: str,
         payload: TestPlanWrite,
+        business_id: str = DEFAULT_BUSINESS_ID,
     ) -> TestPlan | None:
-        plan = self.get(plan_id)
+        plan = self.get(plan_id, business_id)
         if plan is None:
             return None
-        cases = self._require_cases(payload.case_ids)
-        self._require_available_name(payload.name, exclude_plan_id=plan_id)
+        cases = self._require_cases(payload.case_ids, business_id)
+        self._require_available_name(
+            payload.name,
+            exclude_plan_id=plan_id,
+            business_id=business_id,
+        )
         try:
             TagColorService(self.db).ensure(payload.tags)
             plan.name = payload.name
@@ -223,7 +231,7 @@ class TestPlanService:
                 for position, case in enumerate(cases)
             ]
             self.db.commit()
-            return self._required(plan.id)
+            return self._required(plan.id, business_id)
         except IntegrityError as exc:
             self.db.rollback()
             raise TestPlanNameConflictError(
@@ -233,21 +241,31 @@ class TestPlanService:
             self.db.rollback()
             raise
 
-    def get(self, plan_id: str) -> TestPlan | None:
+    def get(
+        self,
+        plan_id: str,
+        business_id: str = DEFAULT_BUSINESS_ID,
+    ) -> TestPlan | None:
         return self.db.scalar(
             select(TestPlan)
             .options(selectinload(TestPlan.cases))
             .where(
                 TestPlan.id == plan_id,
+                TestPlan.business_id == business_id,
                 TestPlan.deleted_at.is_(None),
             )
         )
 
-    def exists_active(self, plan_id: str) -> bool:
+    def exists_active(
+        self,
+        plan_id: str,
+        business_id: str = DEFAULT_BUSINESS_ID,
+    ) -> bool:
         return self.db.scalar(
             select(TestPlan.id)
             .where(
                 TestPlan.id == plan_id,
+                TestPlan.business_id == business_id,
                 TestPlan.deleted_at.is_(None),
             )
             .limit(1)
@@ -260,14 +278,20 @@ class TestPlanService:
         search: str | None,
         tag: str | None = None,
         test_type: str | None = None,
+        business_id: str = DEFAULT_BUSINESS_ID,
+        created_by: str | None = None,
     ) -> tuple[list[TestPlan], int]:
         query = (
             select(TestPlan)
             .options(selectinload(TestPlan.cases))
-            .where(TestPlan.deleted_at.is_(None))
+            .where(
+                TestPlan.deleted_at.is_(None),
+                TestPlan.business_id == business_id,
+            )
         )
         count_query = select(func.count(TestPlan.id)).where(
-            TestPlan.deleted_at.is_(None)
+            TestPlan.deleted_at.is_(None),
+            TestPlan.business_id == business_id,
         )
         if search and search.strip():
             pattern = f"{search.strip().casefold()}%"
@@ -292,6 +316,10 @@ class TestPlanService:
             test_type_filter = self._test_type_filter(test_type.strip())
             query = query.where(test_type_filter)
             count_query = count_query.where(test_type_filter)
+        if created_by and created_by.strip():
+            creator_filter = TestPlan.created_by == created_by.strip()
+            query = query.where(creator_filter)
+            count_query = count_query.where(creator_filter)
         total = self.db.scalar(count_query) or 0
         plans = list(
             self.db.scalars(
@@ -302,13 +330,36 @@ class TestPlanService:
         )
         return plans, total
 
-    def list_plan_tags(self) -> list[TagResponse]:
+    def list_creators(
+        self,
+        business_id: str = DEFAULT_BUSINESS_ID,
+    ) -> list[str]:
+        rows = self.db.scalars(
+            select(TestPlan.created_by)
+            .where(
+                TestPlan.deleted_at.is_(None),
+                TestPlan.business_id == business_id,
+                TestPlan.created_by.is_not(None),
+                TestPlan.created_by != "",
+            )
+            .distinct()
+            .order_by(TestPlan.created_by)
+        ).all()
+        return [creator for creator in rows if isinstance(creator, str)]
+
+    def list_plan_tags(
+        self,
+        business_id: str = DEFAULT_BUSINESS_ID,
+    ) -> list[TagResponse]:
         tag_names = list(
             dict.fromkeys(
                 tag_name
                 for tags in self.db.scalars(
                     select(TestPlan.tags)
-                    .where(TestPlan.deleted_at.is_(None))
+                    .where(
+                        TestPlan.deleted_at.is_(None),
+                        TestPlan.business_id == business_id,
+                    )
                     .order_by(TestPlan.created_at.desc(), TestPlan.id.desc())
                 )
                 if isinstance(tags, list)
@@ -327,8 +378,13 @@ class TestPlanService:
             for tag_name in sorted(tag_names)
         ]
 
-    def delete(self, plan_id: str, now: datetime) -> bool:
-        plan = self.get(plan_id)
+    def delete(
+        self,
+        plan_id: str,
+        now: datetime,
+        business_id: str = DEFAULT_BUSINESS_ID,
+    ) -> bool:
+        plan = self.get(plan_id, business_id)
         if plan is None:
             return False
         plan.deleted_at = now
@@ -336,10 +392,14 @@ class TestPlanService:
         self.db.commit()
         return True
 
-    def stats(self) -> dict[str, int | float]:
+    def stats(
+        self,
+        business_id: str = DEFAULT_BUSINESS_ID,
+    ) -> dict[str, int | float]:
         active_plan_ids = list(
             self.db.scalars(
                 select(TestPlan.id).where(TestPlan.deleted_at.is_(None))
+                .where(TestPlan.business_id == business_id)
             )
         )
         if not active_plan_ids:
@@ -400,7 +460,10 @@ class TestPlanService:
         plan_id: str,
         page: int,
         page_size: int,
+        business_id: str = DEFAULT_BUSINESS_ID,
     ) -> tuple[list[TestCase], int]:
+        if not self.exists_active(plan_id, business_id):
+            return [], 0
         total = self.db.scalar(
             select(func.count(TestPlanCase.case_id)).where(
                 TestPlanCase.plan_id == plan_id
@@ -426,6 +489,7 @@ class TestPlanService:
         case_id: str,
         page: int,
         page_size: int,
+        business_id: str = DEFAULT_BUSINESS_ID,
     ) -> tuple[list[dict], int]:
         plan_ids = (
             select(TestPlanCase.plan_id).where(
@@ -435,6 +499,7 @@ class TestPlanService:
         total = self.db.scalar(
             select(func.count(TestPlan.id)).where(
                 TestPlan.deleted_at.is_(None),
+                TestPlan.business_id == business_id,
                 TestPlan.id.in_(plan_ids),
             )
         ) or 0
@@ -446,6 +511,7 @@ class TestPlanService:
             .join(TestPlanCase, TestPlanCase.plan_id == TestPlan.id)
             .where(
                 TestPlan.deleted_at.is_(None),
+                TestPlan.business_id == business_id,
                 TestPlan.id.in_(plan_ids),
             )
             .group_by(TestPlan.id)
@@ -469,8 +535,13 @@ class TestPlanService:
             total,
         )
 
-    def remove_case(self, plan_id: str, case_id: str) -> bool:
-        plan = self.get(plan_id)
+    def remove_case(
+        self,
+        plan_id: str,
+        case_id: str,
+        business_id: str = DEFAULT_BUSINESS_ID,
+    ) -> bool:
+        plan = self.get(plan_id, business_id)
         if plan is None:
             return False
         association = next(
@@ -657,18 +728,27 @@ class TestPlanService:
             .limit(1)
         ) is not None
 
-    def _required(self, plan_id: str) -> TestPlan:
+    def _required(
+        self,
+        plan_id: str,
+        business_id: str = DEFAULT_BUSINESS_ID,
+    ) -> TestPlan:
         self.db.expire_all()
-        plan = self.get(plan_id)
+        plan = self.get(plan_id, business_id)
         if plan is None:
             raise RuntimeError(f"test plan disappeared: {plan_id}")
         return plan
 
-    def _require_cases(self, case_ids: list[str]) -> list[TestCase]:
+    def _require_cases(
+        self,
+        case_ids: list[str],
+        business_id: str,
+    ) -> list[TestCase]:
         cases = list(
             self.db.scalars(
                 select(TestCase).where(
                     TestCase.id.in_(case_ids),
+                    TestCase.business_id == business_id,
                     TestCase.deleted_at.is_(None),
                 )
             )
@@ -686,9 +766,11 @@ class TestPlanService:
         name: str,
         *,
         exclude_plan_id: str | None = None,
+        business_id: str = DEFAULT_BUSINESS_ID,
     ) -> None:
         query = select(TestPlan.id).where(
             TestPlan.name_key == name.casefold(),
+            TestPlan.business_id == business_id,
             TestPlan.deleted_at.is_(None),
         )
         if exclude_plan_id is not None:

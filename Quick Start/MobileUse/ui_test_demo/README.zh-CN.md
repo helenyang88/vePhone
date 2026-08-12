@@ -66,7 +66,7 @@ Vite 会将 `/api` 和 `/health` 代理到 `http://localhost:8000`。
 | `TASK_EXECUTION_TIMEOUT_SECONDS` | `600` | 单个任务最多运行多久，单位秒。超过后系统会按超时处理。 |
 | `CANCEL_CONFIRM_TIMEOUT_SECONDS` | `30` | 点击取消后，系统等待远端确认取消的最长时间，单位秒。 |
 | `DEVICE_WAIT_TIMEOUT_SECONDS` | `300` | 指定设备离线、失联或被删除时，任务最多等待多久后失败，单位秒。 |
-| `TASK_WORKER_CONCURRENCY` | `4` | 后端 Worker 的全局最大并发数。它是系统层面的上限，不等同于某一次测试计划页面里填写的并发数。 |
+| `TASK_WORKER_CONCURRENCY` | `16` | 后端 Worker 的全局最大并发数。它是系统层面的上限，不等同于业务空间上限或某次执行填写的设备并发数。 |
 
 需要真实设备执行时，可以在设置页面配置 Runner，或使用 `.env.example` 中列出的 `MOBILE_USE_*` 变量。
 
@@ -128,7 +128,7 @@ APP_ENV=production
 APP_DATA_DIR=./data
 APP_SECRET_KEY=replace-with-a-stable-random-string-at-least-32-bytes
 APP_BASE_URL=http://127.0.0.1:8000
-TASK_WORKER_CONCURRENCY=4
+TASK_WORKER_CONCURRENCY=16
 ```
 
 上面 5 个配置的作用：
@@ -139,14 +139,14 @@ TASK_WORKER_CONCURRENCY=4
 | `APP_DATA_DIR` | `./data` | 指定数据保存位置。以后备份、迁移、排查问题时主要看这个目录。 |
 | `APP_SECRET_KEY` | 自己生成一串至少 32 字节的随机字符串 | 用来加密保存云端密钥等敏感配置。部署后请固定不变。 |
 | `APP_BASE_URL` | `http://127.0.0.1:8000` 或实际访问地址 | 告诉系统自己的访问地址。换端口、换域名、加反向代理时需要同步修改。 |
-| `TASK_WORKER_CONCURRENCY` | `4` | 控制后端最多同时处理多少个任务。设备少时调小，设备多且机器性能足够时可调大。修改 `.env` 后需要重启服务才会生效。 |
+| `TASK_WORKER_CONCURRENCY` | `16` | 控制后端最多同时处理多少个任务。修改 `.env` 后需要重启服务才会生效。 |
 
 关于并发数要特别注意：
 
 - `TASK_WORKER_CONCURRENCY` 是整个后端服务的全局上限。
-- 页面中测试计划/批次填写的“并发数”是本次运行的上限。
-- 实际同时运行的任务数通常取决于三者中的最小值：`TASK_WORKER_CONCURRENCY`、本次运行填写的并发数、当前可用设备数。
-- 例如：`TASK_WORKER_CONCURRENCY=4`，本次测试计划并发填 `2`，实际最多同时跑 `2` 个；如果本次并发填 `10`，但 `TASK_WORKER_CONCURRENCY=4`，实际最多先被限制到 `4` 个；如果只有 1 台可用设备，通常也只能同时跑 `1` 个。
+- 每个业务空间默认上限为 `4`，可配置范围为 `1-8`。
+- 页面中测试计划/批次填写的“设备并发数”是本次运行的上限。
+- 本轮实际新增并发取全局剩余、业务剩余、批次剩余和当前业务可用设备数中的最小值。
 
 4. 运行 `make dev` 启动服务。
 5. 打开 `http://127.0.0.1:8000`，创建第一个管理员账号，并在设置页面配置 Runner。

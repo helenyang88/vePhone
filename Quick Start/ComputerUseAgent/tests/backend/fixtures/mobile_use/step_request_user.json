@@ -1,0 +1,23 @@
+{
+  "ResponseMetadata": {
+    "RequestId": "req-step-request-user",
+    "Action": "ListAgentRunCurrentStep",
+    "Version": "2023-08-01",
+    "Service": "ipaas",
+    "Region": "cn-north-1"
+  },
+  "Result": {
+    "Results": [
+      {
+        "Action": "request_user",
+        "Param": {
+          "content": "需要用户确认"
+        },
+        "StepResult": {
+          "Result": "{\"request_user\":\"请确认是否继续\"}"
+        },
+        "Timestamp": 1767225602000
+      }
+    ]
+  }
+}

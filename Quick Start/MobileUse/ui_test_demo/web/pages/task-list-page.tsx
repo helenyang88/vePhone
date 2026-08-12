@@ -3,7 +3,13 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router";
 
 import { ApiError, api } from "../api/client";
-import type { Task, TaskListPage, TaskStats, Verdict } from "../api/types";
+import type {
+  Task,
+  TaskListPage,
+  TaskOperatorListResponse,
+  TaskStats,
+  Verdict,
+} from "../api/types";
 import { CopyButton } from "../components/copy-button";
 import { MetricCard } from "../components/metric-card";
 import { PageHeader } from "../components/page-header";
@@ -173,6 +179,7 @@ export function TaskListPage() {
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [resultFilter, setResultFilter] = useState<string>("all");
   const [reviewFilter, setReviewFilter] = useState<string>("all");
+  const [operatorFilter, setOperatorFilter] = useState<string>("all");
   const [timeFilter, setTimeFilter] = useState<string>("all");
   const [createdAfterFilter, setCreatedAfterFilter] = useState<string | null>(null);
   const [searchInput, setSearchInput] = useState("");
@@ -191,6 +198,7 @@ export function TaskListPage() {
     if (statusFilter !== "all") params.set("status", statusFilter);
     if (resultFilter !== "all") params.set("verdict", resultFilter);
     if (reviewFilter !== "all") params.set("review_result", reviewFilter);
+    if (operatorFilter !== "all") params.set("operator", operatorFilter);
     if (createdAfterFilter) {
       params.set("created_after", createdAfterFilter);
     }
@@ -208,6 +216,11 @@ export function TaskListPage() {
     queryKey: ["task-stats"],
     queryFn: () => api.get<TaskStats>("/tasks/stats"),
     refetchInterval: 5000,
+  });
+
+  const operators = useQuery({
+    queryKey: ["task-operators"],
+    queryFn: () => api.get<TaskOperatorListResponse>("/tasks/operators"),
   });
 
   const cancelTask = useMutation({
@@ -255,8 +268,17 @@ export function TaskListPage() {
   const hasFilter = statusFilter !== "all"
     || resultFilter !== "all"
     || reviewFilter !== "all"
+    || operatorFilter !== "all"
     || timeFilter !== "all"
     || Boolean(search);
+
+  const operatorOptions = [
+    { value: "all", label: "全部操作者" },
+    ...(operators.data?.items ?? []).map((operator) => ({
+      value: operator,
+      label: operator,
+    })),
+  ];
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -270,6 +292,7 @@ export function TaskListPage() {
     setStatusFilter("all");
     setResultFilter("all");
     setReviewFilter("all");
+    setOperatorFilter("all");
     setTimeFilter("all");
     setCreatedAfterFilter(null);
     setSearch("");
@@ -392,6 +415,15 @@ export function TaskListPage() {
           options={REVIEW_FILTERS}
           onChange={(value) => {
             setReviewFilter(value);
+            setPage(1);
+          }}
+        />
+        <SingleSelect
+          label="操作者筛选"
+          value={operatorFilter}
+          options={operatorOptions}
+          onChange={(value) => {
+            setOperatorFilter(value);
             setPage(1);
           }}
         />

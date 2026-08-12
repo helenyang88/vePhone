@@ -3,7 +3,7 @@ from datetime import UTC, datetime, timedelta
 from fastapi import APIRouter, Query, Request, Response, status
 from sqlalchemy import select
 
-from mua_platform.api.deps import CsrfSession, CurrentUser, Database
+from mua_platform.api.deps import CsrfSession, CurrentBusiness, CurrentUser, Database
 from mua_platform.api.errors import api_error
 from mua_platform.runners.universal_gateway import UniversalGateway
 from mua_platform.settings.repository import SettingRepository
@@ -41,6 +41,7 @@ async def create_task_batch(
     request: Request,
     db: Database,
     user: CurrentUser,
+    business: CurrentBusiness,
     _csrf_session: CsrfSession,
 ):
     if payload.selection_mode == "test_plan":
@@ -55,7 +56,7 @@ async def create_task_batch(
             request.app.state.setting_cipher,
             request.app.state.settings.runner_setting_defaults(),
         )
-    ).get_runner_config()
+    ).get_runner_config(business.id)
     try:
         snapshot = runner_config.execution_snapshot()
     except RunnerExecutionSettingsError as exc:
@@ -66,10 +67,13 @@ async def create_task_batch(
             "Runner execution settings are incomplete",
             {"missing_fields": exc.missing_fields},
         ) from exc
+    snapshot["business_id"] = business.id
+    snapshot["business_name_snapshot"] = business.name
     try:
         result = TaskBatchService(db).create(
             payload,
             created_by=user.username,
+            business_id=business.id,
             runner_type=runner_config.mode,
             config_snapshot=snapshot,
             device_wait_timeout_seconds=(
@@ -110,12 +114,14 @@ async def cancel_task_batch(
     request: Request,
     db: Database,
     _user: CurrentUser,
+    business: CurrentBusiness,
     _csrf_session: CsrfSession,
 ):
     try:
         result = TaskBatchService(db).cancel(
             batch_id,
             datetime.now(UTC),
+            business_id=business.id,
         )
     except ValueError as exc:
         if str(exc).startswith("task_batch_not_found:"):
@@ -134,6 +140,7 @@ async def cancel_task_batch(
 def list_tasks(
     db: Database,
     _user: CurrentUser,
+    business: CurrentBusiness,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     status_filter: str | None = Query(None, alias="status"),
@@ -157,6 +164,7 @@ def list_tasks(
         review_result=review_result,
         search=search,
         created_after=created_after,
+        business_id=business.id,
     )
     return TaskListResponse(
         items=[TaskResponse.model_validate(task) for task in items],
@@ -167,13 +175,21 @@ def list_tasks(
 
 
 @router.get("/tasks/stats")
-def get_task_stats(db: Database, _user: CurrentUser) -> dict[str, int]:
-    return SQLiteTaskRepository(db).stats()
+def get_task_stats(
+    db: Database,
+    _user: CurrentUser,
+    business: CurrentBusiness,
+) -> dict[str, int]:
+    return SQLiteTaskRepository(db).stats(business.id)
 
 
 @router.get("/tasks/operators")
-def list_task_operators(db: Database, _user: CurrentUser) -> dict[str, list[str]]:
-    return {"items": SQLiteTaskRepository(db).list_operators()}
+def list_task_operators(
+    db: Database,
+    _user: CurrentUser,
+    business: CurrentBusiness,
+) -> dict[str, list[str]]:
+    return {"items": SQLiteTaskRepository(db).list_operators(business.id)}
 
 
 @router.put("/tasks/{task_id}/review", response_model=TaskResponse)
@@ -182,8 +198,12 @@ def review_task(
     payload: TaskReviewRequest,
     db: Database,
     user: CurrentUser,
+    business: CurrentBusiness,
     _csrf_session: CsrfSession,
 ) -> Task:
+    existing = SQLiteTaskRepository(db).get(task_id, business.id)
+    if existing is None:
+        raise api_error(404, "task_not_found", "Task not found")
     try:
         return SQLiteTaskRepository(db).review_task(
             task_id,
@@ -210,8 +230,9 @@ async def get_task_runtime(
     request: Request,
     db: Database,
     _user: CurrentUser,
+    business: CurrentBusiness,
 ) -> dict:
-    task = _get_task(db, task_id)
+    task = _get_task(db, task_id, business.id)
     response = {
         "task": TaskResponse.model_validate(task).model_dump(mode="json"),
         "current_step": None,
@@ -234,6 +255,7 @@ async def get_task_runtime(
         ).model_dump(mode="json"),
         "errors": {},
     }
+    _merge_local_runtime_assets(response, task.result_assets or {})
     if task.runner_type != "mobile_use" or not task.remote_run_id:
         return response
 
@@ -243,7 +265,9 @@ async def get_task_runtime(
             request.app.state.setting_cipher,
             request.app.state.settings.runner_setting_defaults(),
         )
-    ).get_runner_config().with_execution_snapshot(task.runner_config_snapshot)
+    ).get_runner_config(task.business_id).with_execution_snapshot(
+        task.runner_config_snapshot
+    )
     gateway = UniversalGateway()
 
     try:
@@ -289,8 +313,13 @@ async def get_task_runtime(
 
 
 @router.get("/tasks/{task_id}", response_model=TaskResponse)
-def get_task(task_id: str, db: Database, _user: CurrentUser) -> Task:
-    return _get_task(db, task_id)
+def get_task(
+    task_id: str,
+    db: Database,
+    _user: CurrentUser,
+    business: CurrentBusiness,
+) -> Task:
+    return _get_task(db, task_id, business.id)
 
 
 @router.post("/tasks/{task_id}/cancel", response_model=TaskResponse)
@@ -299,10 +328,11 @@ async def cancel_task(
     request: Request,
     db: Database,
     _user: CurrentUser,
+    business: CurrentBusiness,
     _csrf_session: CsrfSession,
 ) -> Task:
     repository = SQLiteTaskRepository(db)
-    existing = repository.get(task_id)
+    existing = repository.get(task_id, business.id)
     if existing is None:
         raise api_error(404, "task_not_found", "Task not found")
     service = TaskService(
@@ -335,9 +365,10 @@ def list_task_events(
     task_id: str,
     db: Database,
     _user: CurrentUser,
+    business: CurrentBusiness,
     after_sequence: int = Query(default=0, ge=0),
 ) -> dict:
-    _get_task(db, task_id)
+    _get_task(db, task_id, business.id)
     events = db.scalars(
         select(TaskEvent)
         .where(
@@ -364,7 +395,9 @@ def get_task_report(
     task_id: str,
     db: Database,
     _user: CurrentUser,
+    business: CurrentBusiness,
 ) -> dict:
+    _get_task(db, task_id, business.id)
     service = TaskService(
         SQLiteTaskRepository(db),
         None,
@@ -396,8 +429,8 @@ async def wait_for_worker(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-def _get_task(db: Database, task_id: str) -> Task:
-    task = db.get(Task, task_id)
+def _get_task(db: Database, task_id: str, business_id: str) -> Task:
+    task = SQLiteTaskRepository(db).get(task_id, business_id)
     if task is None:
         raise api_error(404, "task_not_found", "Task not found")
     return task
@@ -499,6 +532,24 @@ def _thread_steps(payload: dict) -> list[dict]:
             }
         )
     return normalized
+
+
+def _merge_local_runtime_assets(response: dict, assets: dict) -> None:
+    if not isinstance(assets, dict):
+        return
+    current_step = assets.get("current_step")
+    if isinstance(current_step, dict):
+        response["current_step"] = current_step
+    thread_groups = assets.get("thread_groups")
+    if isinstance(thread_groups, list):
+        response["thread_groups"] = [
+            item for item in thread_groups if isinstance(item, dict)
+        ]
+    thread_steps = assets.get("thread_steps")
+    if isinstance(thread_steps, list):
+        response["thread_steps"] = [
+            item for item in thread_steps if isinstance(item, dict)
+        ]
 
 
 def _merge_remote_result(

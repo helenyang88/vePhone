@@ -237,6 +237,17 @@ def test_list_tasks_filters_and_lists_operators(authenticated_client):
         "exec-bob",
         created_by="bob",
     )
+    reviewed_task = _seed_task(
+        authenticated_client,
+        case_id,
+        "exec-reviewed",
+        created_by="system",
+    )
+    with authenticated_client.app.state.session_factory() as db:
+        task = db.get(Task, reviewed_task)
+        assert task is not None
+        task.reviewed_by = "reviewer"
+        db.commit()
 
     response = authenticated_client.get(
         "/api/v1/tasks",
@@ -247,9 +258,17 @@ def test_list_tasks_filters_and_lists_operators(authenticated_client):
     assert [item["id"] for item in response.json()["items"]] == [alice_task]
     assert response.json()["items"][0]["created_by"] == "alice"
 
+    reviewed = authenticated_client.get(
+        "/api/v1/tasks",
+        params={"operator": "reviewer"},
+    )
+    assert reviewed.status_code == 200
+    assert [item["id"] for item in reviewed.json()["items"]] == [reviewed_task]
+    assert reviewed.json()["items"][0]["reviewed_by"] == "reviewer"
+
     operators = authenticated_client.get("/api/v1/tasks/operators")
     assert operators.status_code == 200
-    assert operators.json() == {"items": ["alice", "bob"]}
+    assert operators.json() == {"items": ["alice", "bob", "reviewer", "system"]}
 
 
 def test_list_tasks_filters_by_created_after(authenticated_client):

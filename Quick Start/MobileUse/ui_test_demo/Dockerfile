@@ -19,7 +19,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     APP_ENV=production \
     APP_DATA_DIR=/app/data \
     APP_BASE_URL=http://127.0.0.1:8000 \
-    TASK_WORKER_CONCURRENCY=4 \
+    TASK_WORKER_CONCURRENCY=16 \
     PATH="/app/.venv/bin:${PATH}"
 
 WORKDIR /app

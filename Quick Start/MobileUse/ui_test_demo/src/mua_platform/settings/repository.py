@@ -1,6 +1,7 @@
 from collections.abc import Mapping
 from datetime import UTC, datetime
 
+from sqlalchemy import select
 from sqlalchemy.dialects.sqlite import insert
 from sqlalchemy.orm import Session
 
@@ -27,6 +28,18 @@ class SettingRepository:
             return self.cipher.decrypt(key, setting.encrypted_value)
         except SettingDecryptionError:
             return self.fallbacks.get(key)
+
+    def list_decrypted(self) -> dict[str, str]:
+        values: dict[str, str] = {}
+        for setting in self.db.scalars(select(Setting)):
+            try:
+                values[setting.key] = self.cipher.decrypt(
+                    setting.key,
+                    setting.encrypted_value,
+                )
+            except SettingDecryptionError:
+                continue
+        return values
 
     def set_many(self, values: Mapping[str, str]) -> datetime:
         if any(value == "" for value in values.values()):

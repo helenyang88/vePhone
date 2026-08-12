@@ -23,6 +23,7 @@ export type CustomExecutionForm = {
   mcp_json: string;
   max_output_tokens: string;
   gps_info: string;
+  request_headers: string;
 };
 
 export type ExecutionConfigDraft = {
@@ -52,8 +53,21 @@ export const DEFAULT_EXECUTION_CONFIG: ExecutionConfigDraft = {
     mcp_json: "",
     max_output_tokens: "",
     gps_info: "",
+    request_headers: "",
   },
 };
+
+const REQUEST_HEADERS_PLACEHOLDER = '{"X-Env":"test","X-Request-Source":"mua"}';
+const RESERVED_REQUEST_HEADERS = new Set([
+  "accept",
+  "authorization",
+  "content-length",
+  "content-type",
+  "host",
+  "user-agent",
+  "x-content-sha256",
+  "x-date",
+]);
 
 const AGENT_CONFIG_OPTIONS = [
   { value: "global", label: "使用全局配置" },
@@ -98,6 +112,9 @@ export function createExecutionConfigDraftFromOptions(
         ? String(options.max_output_tokens)
         : "",
       gps_info: options.gps_info ?? "",
+      request_headers: options.request_headers
+        ? JSON.stringify(options.request_headers, null, 2)
+        : "",
     },
   };
 }
@@ -142,6 +159,10 @@ export function buildExecuteConfig(
   if (outputError) return { config: null, error: outputError };
   const mcpError = validateJsonString(draft.custom.mcp_json, "McpJson");
   if (mcpError) return { config: null, error: mcpError };
+  const requestHeaders = parseRequestHeaders(draft.custom.request_headers);
+  if (typeof requestHeaders === "string") {
+    return { config: null, error: requestHeaders };
+  }
 
   const options: AgentRuntimeOptions = {
     thread_id: optionalString(draft.custom.thread_id),
@@ -161,6 +182,7 @@ export function buildExecuteConfig(
       ? Number(draft.custom.max_output_tokens)
       : null,
     gps_info: optionalString(draft.custom.gps_info),
+    request_headers: requestHeaders,
   };
   return {
     config: {
@@ -276,6 +298,7 @@ export function ExecutionConfigFields({
   function renderTextArea(
     field: keyof CustomExecutionForm,
     label: string,
+    placeholder = "",
   ) {
     const inputId = `${idPrefix}-custom-${field}`;
     return (
@@ -287,6 +310,7 @@ export function ExecutionConfigFields({
           autoComplete="off"
           className="form-input"
           rows={3}
+          placeholder={placeholder}
           disabled={disabled}
           value={String(value.custom[field] ?? "")}
           onChange={(event) =>
@@ -464,6 +488,11 @@ export function ExecutionConfigFields({
                 "OutputSchema（JSON 字符串）",
               )}
               {renderTextArea("mcp_json", "McpJson（JSON 字符串）")}
+              {renderTextArea(
+                "request_headers",
+                "请求 Header（JSON 对象）",
+                REQUEST_HEADERS_PLACEHOLDER,
+              )}
             </div>
           </section>
         </div>
@@ -503,4 +532,20 @@ function validateJsonString(value: string, label: string): string {
   } catch {
     return `${label} 不是合法 JSON 字符串`;
   }
+}
+
+function parseRequestHeaders(
+  value: string,
+): Record<string, string> | null | string {
+  const parsed = parseJsonObject(value, "请求 Header");
+  if (parsed === null || typeof parsed === "string") return parsed;
+  for (const [name, headerValue] of Object.entries(parsed)) {
+    if (RESERVED_REQUEST_HEADERS.has(name.trim().toLowerCase())) {
+      return `请求 Header 包含不允许覆盖的保留字段：${name}`;
+    }
+    if (typeof headerValue !== "string") {
+      return "请求 Header 的值必须是字符串";
+    }
+  }
+  return parsed as Record<string, string>;
 }

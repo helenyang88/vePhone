@@ -293,6 +293,7 @@ def _rebuild_tasks_for_current_schema(engine: Engine) -> None:
                     """
                     CREATE TABLE tasks_current (
                         id VARCHAR(40) NOT NULL PRIMARY KEY,
+                        business_id VARCHAR(40) DEFAULT 'biz_default',
                         case_id VARCHAR(40) NOT NULL,
                         batch_id VARCHAR(40),
                         batch_position INTEGER,
@@ -337,7 +338,7 @@ def _rebuild_tasks_for_current_schema(engine: Engine) -> None:
                 text(
                     """
                     INSERT INTO tasks_current (
-                        id, case_id, batch_id, batch_position, queue_reason,
+                        id, business_id, case_id, batch_id, batch_position, queue_reason,
                         script_version_id, prompt_snapshot,
                         result_summary, result_evidence, runner_type, scenario,
                         created_by, execution_status, verdict,
@@ -350,7 +351,9 @@ def _rebuild_tasks_for_current_schema(engine: Engine) -> None:
                         created_at, started_at, finished_at
                     )
                     SELECT
-                        id, case_id, batch_id, batch_position, queue_reason,
+                        id,
+                        COALESCE(business_id, 'biz_default'),
+                        case_id, batch_id, batch_position, queue_reason,
                         script_version_id, prompt_snapshot,
                         result_summary, COALESCE(result_evidence, '[]'),
                         runner_type, scenario, COALESCE(created_by, 'system'),
@@ -368,6 +371,7 @@ def _rebuild_tasks_for_current_schema(engine: Engine) -> None:
             )
             connection.execute(text("DROP TABLE tasks"))
             connection.execute(text("ALTER TABLE tasks_current RENAME TO tasks"))
+            connection.execute(text("CREATE INDEX ix_tasks_business_id ON tasks (business_id)"))
             connection.execute(text("CREATE INDEX ix_tasks_case_id ON tasks (case_id)"))
             connection.execute(text("CREATE INDEX ix_tasks_batch_id ON tasks (batch_id)"))
             connection.execute(
@@ -388,6 +392,12 @@ def _rebuild_tasks_for_current_schema(engine: Engine) -> None:
 
 def ensure_schema_migrations(engine: Engine) -> None:
     from sqlalchemy import text as sql_text
+    from mua_platform.business.models import (
+        DEFAULT_BUSINESS_ID,
+        DEFAULT_BUSINESS_NAME,
+        BusinessSpace,
+    )
+    from mua_platform.business.service import business_name_key
     from mua_platform.tasks.models import TaskBatch
     from mua_platform.test_plans.models import (
         PlanExecution,
@@ -396,11 +406,37 @@ def ensure_schema_migrations(engine: Engine) -> None:
         TestPlanCase,
     )
 
+    BusinessSpace.__table__.create(engine, checkfirst=True)
     TaskBatch.__table__.create(engine, checkfirst=True)
     ensure_users_multi_account_schema(engine)
+    if not _column_exists(engine, "business_spaces", "task_concurrency_limit"):
+        with engine.begin() as connection:
+            connection.execute(
+                sql_text(
+                    "ALTER TABLE business_spaces ADD COLUMN "
+                    "task_concurrency_limit INTEGER NOT NULL DEFAULT 4"
+                )
+            )
+    with engine.begin() as connection:
+        existing_default = connection.execute(
+            sql_text("SELECT id FROM business_spaces WHERE id = :id"),
+            {"id": DEFAULT_BUSINESS_ID},
+        ).first()
+        if existing_default is None:
+            connection.execute(
+                BusinessSpace.__table__.insert().values(
+                    id=DEFAULT_BUSINESS_ID,
+                    name=DEFAULT_BUSINESS_NAME,
+                    name_key=business_name_key(DEFAULT_BUSINESS_NAME),
+                    description=None,
+                    is_default=True,
+                    created_by="system",
+                )
+            )
 
     if _table_exists(engine, "test_cases"):
         alterations = [
+            ("business_id", "ALTER TABLE test_cases ADD COLUMN business_id VARCHAR(40) DEFAULT 'biz_default'"),
             ("module", "ALTER TABLE test_cases ADD COLUMN module VARCHAR(100)"),
             ("content_markdown", "ALTER TABLE test_cases ADD COLUMN content_markdown TEXT"),
             ("tags", "ALTER TABLE test_cases ADD COLUMN tags JSON DEFAULT '[]'"),
@@ -419,6 +455,12 @@ def ensure_schema_migrations(engine: Engine) -> None:
             for col_name, ddl in alterations:
                 if not _column_exists(engine, "test_cases", col_name):
                     connection.execute(sql_text(ddl))
+            connection.execute(
+                sql_text(
+                    "UPDATE test_cases SET business_id = 'biz_default' "
+                    "WHERE business_id IS NULL OR business_id = ''"
+                )
+            )
             for col_name in (
                 "mode",
                 "app_name",
@@ -435,6 +477,7 @@ def ensure_schema_migrations(engine: Engine) -> None:
 
     if _table_exists(engine, "tasks"):
         task_alterations = [
+            ("business_id", "ALTER TABLE tasks ADD COLUMN business_id VARCHAR(40) DEFAULT 'biz_default'"),
             ("batch_id", "ALTER TABLE tasks ADD COLUMN batch_id VARCHAR(40)"),
             ("batch_position", "ALTER TABLE tasks ADD COLUMN batch_position INTEGER"),
             ("queue_reason", "ALTER TABLE tasks ADD COLUMN queue_reason VARCHAR(64)"),
@@ -458,6 +501,12 @@ def ensure_schema_migrations(engine: Engine) -> None:
                     connection.execute(sql_text(ddl))
             connection.execute(
                 sql_text(
+                    "UPDATE tasks SET business_id = 'biz_default' "
+                    "WHERE business_id IS NULL OR business_id = ''"
+                )
+            )
+            connection.execute(
+                sql_text(
                     "UPDATE tasks SET created_by = 'system' "
                     "WHERE created_by IS NULL OR created_by = ''"
                 )
@@ -476,8 +525,37 @@ def ensure_schema_migrations(engine: Engine) -> None:
         if _tasks_require_current_schema(engine):
             _rebuild_tasks_for_current_schema(engine)
 
+    if _table_exists(engine, "task_batches"):
+        with engine.begin() as connection:
+            if not _column_exists(engine, "task_batches", "business_id"):
+                connection.execute(
+                    sql_text(
+                        "ALTER TABLE task_batches ADD COLUMN "
+                        "business_id VARCHAR(40) DEFAULT 'biz_default'"
+                    )
+                )
+            connection.execute(
+                sql_text(
+                    "UPDATE task_batches SET business_id = 'biz_default' "
+                    "WHERE business_id IS NULL OR business_id = ''"
+                )
+            )
+
     if _table_exists(engine, "test_plans"):
         with engine.begin() as connection:
+            if not _column_exists(engine, "test_plans", "business_id"):
+                connection.execute(
+                    sql_text(
+                        "ALTER TABLE test_plans ADD COLUMN "
+                        "business_id VARCHAR(40) DEFAULT 'biz_default'"
+                    )
+                )
+            connection.execute(
+                sql_text(
+                    "UPDATE test_plans SET business_id = 'biz_default' "
+                    "WHERE business_id IS NULL OR business_id = ''"
+                )
+            )
             if not _column_exists(engine, "test_plans", "test_type"):
                 connection.execute(
                     sql_text(
@@ -489,6 +567,22 @@ def ensure_schema_migrations(engine: Engine) -> None:
                 sql_text(
                     "UPDATE test_plans SET test_type = 'regression' "
                     "WHERE test_type IS NULL OR test_type = ''"
+                )
+            )
+
+    if _table_exists(engine, "plan_executions"):
+        with engine.begin() as connection:
+            if not _column_exists(engine, "plan_executions", "business_id"):
+                connection.execute(
+                    sql_text(
+                        "ALTER TABLE plan_executions ADD COLUMN "
+                        "business_id VARCHAR(40) DEFAULT 'biz_default'"
+                    )
+                )
+            connection.execute(
+                sql_text(
+                    "UPDATE plan_executions SET business_id = 'biz_default' "
+                    "WHERE business_id IS NULL OR business_id = ''"
                 )
             )
 

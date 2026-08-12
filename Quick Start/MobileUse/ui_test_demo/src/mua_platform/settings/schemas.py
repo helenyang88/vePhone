@@ -1,12 +1,22 @@
+import json
 import re
 from typing import Any, Literal
-import json
 
 from pydantic import BaseModel, Field, field_validator
 
 
 RunnerMode = Literal["mock", "mobile_use"]
 _TOS_REGION = re.compile(r"^[a-z]{2}-[a-z]+(?:-\d+)?$")
+_RESERVED_REQUEST_HEADERS = {
+    "accept",
+    "authorization",
+    "content-length",
+    "content-type",
+    "host",
+    "user-agent",
+    "x-content-sha256",
+    "x-date",
+}
 
 
 class RunnerExecutionSettingsError(ValueError):
@@ -38,6 +48,7 @@ class MobileUseSettingsUpdate(BaseModel):
     mcp_json: str | None = None
     max_output_tokens: int | None = Field(default=None, ge=1)
     gps_info: str | None = None
+    request_headers: dict[str, str] | None = None
 
     @field_validator("output_schema", "mcp_json")
     @classmethod
@@ -69,6 +80,7 @@ class AgentRuntimeOptions(BaseModel):
     mcp_json: str | None = None
     max_output_tokens: int | None = Field(default=None, ge=1)
     gps_info: str | None = None
+    request_headers: dict[str, str] | None = None
 
     @field_validator("output_schema", "mcp_json")
     @classmethod
@@ -77,6 +89,14 @@ class AgentRuntimeOptions(BaseModel):
             return None
         json.loads(value)
         return value
+
+    @field_validator("request_headers")
+    @classmethod
+    def validate_request_headers_field(
+        cls,
+        value: dict[str, str] | None,
+    ) -> dict[str, str] | None:
+        return validate_request_headers(value)
 
 
 class RunnerConfig(BaseModel):
@@ -104,6 +124,7 @@ class RunnerConfig(BaseModel):
     mcp_json: str | None = None
     max_output_tokens: int | None = Field(default=None, ge=1)
     gps_info: str | None = None
+    request_headers: dict[str, str] | None = None
 
     @classmethod
     def mock(cls) -> "RunnerConfig":
@@ -142,6 +163,7 @@ class RunnerConfig(BaseModel):
             "mcp_json": self.mcp_json,
             "max_output_tokens": self.max_output_tokens,
             "gps_info": self.gps_info,
+            "request_headers": self.request_headers,
         })
 
     def with_execution_snapshot(self, snapshot: dict[str, Any]) -> "RunnerConfig":
@@ -168,6 +190,7 @@ class RunnerConfig(BaseModel):
                 "mcp_json",
                 "max_output_tokens",
                 "gps_info",
+                "request_headers",
             )
         }
         return self.model_copy(
@@ -180,3 +203,21 @@ class RunnerConfig(BaseModel):
 
 def _without_none(values: dict[str, Any]) -> dict[str, Any]:
     return {key: value for key, value in values.items() if value is not None}
+
+
+def validate_request_headers(
+    value: dict[str, str] | None,
+) -> dict[str, str] | None:
+    if value is None:
+        return None
+    normalized: dict[str, str] = {}
+    for raw_name, raw_value in value.items():
+        if not isinstance(raw_name, str) or not raw_name.strip():
+            raise ValueError("request_header_name_invalid")
+        if not isinstance(raw_value, str):
+            raise ValueError("request_header_value_invalid")
+        name = raw_name.strip()
+        if name.lower() in _RESERVED_REQUEST_HEADERS:
+            raise ValueError("request_header_reserved")
+        normalized[name] = raw_value
+    return normalized

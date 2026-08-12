@@ -9,6 +9,8 @@ from sqlalchemy.orm import Session
 
 from mua_platform.api.errors import api_error
 from mua_platform.auth.models import AuthSession, User
+from mua_platform.business.models import DEFAULT_BUSINESS_ID, BusinessSpace
+from mua_platform.business.service import BusinessSpaceService
 
 SESSION_IDLE_TIMEOUT = timedelta(minutes=30)
 SESSION_ACTIVITY_REFRESH_INTERVAL = timedelta(minutes=5)
@@ -66,6 +68,17 @@ def require_admin(user: CurrentUser) -> User:
 
 
 AdminUser = Annotated[User, Depends(require_admin)]
+
+
+def require_business(request: Request, db: Database) -> BusinessSpace:
+    business_id = request.headers.get("X-Business-Id") or DEFAULT_BUSINESS_ID
+    business = BusinessSpaceService(db).get_active(business_id)
+    if business is None:
+        raise api_error(404, "business_not_found", "Business space not found")
+    return business
+
+
+CurrentBusiness = Annotated[BusinessSpace, Depends(require_business)]
 
 
 def require_csrf(request: Request, auth_session: CurrentSession) -> AuthSession:

@@ -546,6 +546,7 @@ def _base_execution_snapshot(
         "mcp_json": config.mcp_json,
         "max_output_tokens": config.max_output_tokens,
         "gps_info": config.gps_info,
+        "request_headers": config.request_headers,
         }.items()
         if value is not None
     }

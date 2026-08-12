@@ -126,6 +126,51 @@ def test_list_cases_tag_filter_matches_when_case_contains_tag(authenticated_clie
     assert [item["id"] for item in body["items"]] == [matched]
 
 
+def test_list_case_creators_returns_distinct_active_creators(authenticated_client):
+    with authenticated_client.app.state.session_factory() as db:
+        from mua_platform.cases.models import TestCase
+
+        db.add_all([
+            TestCase(
+                id="case_creator_admin",
+                title="管理员创建",
+                business_id="biz_default",
+                module="登录",
+                content_markdown="## 执行任务\n- 打开",
+                tags=[],
+                automation_level="auto",
+                created_by="admin",
+            ),
+            TestCase(
+                id="case_creator_alice",
+                title="Alice 创建",
+                business_id="biz_default",
+                module="支付",
+                content_markdown="## 执行任务\n- 打开",
+                tags=[],
+                automation_level="auto",
+                created_by="alice",
+            ),
+            TestCase(
+                id="case_creator_deleted",
+                title="已删除",
+                business_id="biz_default",
+                module="支付",
+                content_markdown="## 执行任务\n- 打开",
+                tags=[],
+                automation_level="auto",
+                created_by="deleted-user",
+                deleted_at=datetime.now(UTC),
+            ),
+        ])
+        db.commit()
+
+    response = authenticated_client.get("/api/v1/cases/creators")
+
+    assert response.status_code == 200
+    assert response.json() == {"items": ["admin", "alice"]}
+
+
 def test_list_cases_includes_active_bound_plan_count(authenticated_client):
     bound = _create_case(authenticated_client, "有关联计划")
     unbound = _create_case(authenticated_client, "无关联计划")

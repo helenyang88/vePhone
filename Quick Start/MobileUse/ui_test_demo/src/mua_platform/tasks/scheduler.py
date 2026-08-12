@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+from collections import Counter, defaultdict
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session, selectinload
 
+from mua_platform.business.models import BusinessSpace
 from mua_platform.pods.models import POD_STATUS_RUNNING, DiscoveredPod
 from mua_platform.tasks.batches import aggregate_batch_status
 from mua_platform.tasks.models import PodLease, Task, TaskBatch
@@ -12,6 +15,12 @@ from mua_platform.tasks.repository import SQLiteTaskRepository
 from mua_platform.tasks.state_machine import ExecutionStatus
 
 POD_FRESHNESS_WINDOW = timedelta(seconds=180)
+
+
+@dataclass(frozen=True)
+class ScheduleResult:
+    task_ids: list[str]
+    last_business_id: str | None
 
 
 class BatchScheduler:
@@ -24,10 +33,17 @@ class BatchScheduler:
         self.db = db
         self.reservation_ttl = reservation_ttl
 
-    def schedule(self, now: datetime) -> list[str]:
+    def schedule(
+        self,
+        now: datetime,
+        *,
+        global_limit: int,
+        start_after_business_id: str | None = None,
+    ) -> ScheduleResult:
+        if global_limit < 1:
+            raise ValueError("global_limit_must_be_positive")
         repository = SQLiteTaskRepository(self.db)
         repository.release_expired_leases(now)
-        assigned: list[str] = []
         batches = list(
             self.db.scalars(
                 select(TaskBatch)
@@ -40,15 +56,114 @@ class BatchScheduler:
                 .order_by(TaskBatch.created_at, TaskBatch.id)
             )
         )
+        eligible_batches: list[TaskBatch] = []
         for batch in batches:
-            assigned.extend(self._schedule_batch(batch, now, repository))
-        return assigned
+            if batch.cancel_requested_at is not None:
+                aggregate_batch_status(batch, now)
+                continue
+            if not any(
+                task.execution_status == ExecutionStatus.QUEUED
+                for task in batch.tasks
+            ):
+                aggregate_batch_status(batch, now)
+                continue
+            eligible_batches.append(batch)
+        self.db.commit()
+
+        active_leases = list(
+            self.db.scalars(select(PodLease).where(PodLease.expires_at > now))
+        )
+        leased_task_ids = {lease.task_id for lease in active_leases}
+        occupied_tasks = list(
+            self.db.scalars(
+                select(Task).where(
+                    or_(
+                        Task.execution_status == ExecutionStatus.RUNNING,
+                        Task.id.in_(leased_task_ids),
+                    )
+                )
+            )
+        )
+        occupied_by_id = {task.id: task for task in occupied_tasks}
+        business_occupied = Counter(
+            task.business_id for task in occupied_by_id.values()
+        )
+        global_remaining = max(0, global_limit - len(occupied_by_id))
+
+        batches_by_business: dict[str, list[TaskBatch]] = defaultdict(list)
+        for batch in eligible_batches:
+            batches_by_business[batch.business_id].append(batch)
+        business_ids = list(batches_by_business)
+        business_limits = {
+            business.id: business.task_concurrency_limit
+            for business in self.db.scalars(
+                select(BusinessSpace).where(BusinessSpace.id.in_(business_ids))
+            )
+        }
+
+        if global_remaining == 0:
+            self._set_capacity_reason(
+                eligible_batches,
+                leased_task_ids,
+                "waiting_for_global_capacity",
+            )
+            self.db.commit()
+            return ScheduleResult([], start_after_business_id)
+
+        ordered_business_ids = self._rotate_businesses(
+            business_ids,
+            start_after_business_id,
+        )
+        assigned: list[str] = []
+        last_business_id = start_after_business_id
+        while global_remaining > 0:
+            assigned_in_round = False
+            for business_id in ordered_business_ids:
+                limit = business_limits.get(business_id, 4)
+                if business_occupied[business_id] >= limit:
+                    self._set_capacity_reason(
+                        batches_by_business[business_id],
+                        leased_task_ids | set(assigned),
+                        "waiting_for_business_capacity",
+                    )
+                    continue
+                for batch in batches_by_business[business_id]:
+                    newly_assigned = self._schedule_batch(
+                        batch,
+                        now,
+                        repository,
+                        max_assignments=1,
+                    )
+                    if not newly_assigned:
+                        continue
+                    task_id = newly_assigned[0]
+                    assigned.append(task_id)
+                    business_occupied[business_id] += 1
+                    global_remaining -= 1
+                    last_business_id = business_id
+                    assigned_in_round = True
+                    break
+                if global_remaining == 0:
+                    break
+            if not assigned_in_round:
+                break
+
+        if global_remaining == 0:
+            self._set_capacity_reason(
+                eligible_batches,
+                leased_task_ids | set(assigned),
+                "waiting_for_global_capacity",
+            )
+        self.db.commit()
+        return ScheduleResult(assigned, last_business_id)
 
     def _schedule_batch(
         self,
         batch: TaskBatch,
         now: datetime,
         repository: SQLiteTaskRepository,
+        *,
+        max_assignments: int,
     ) -> list[str]:
         if batch.cancel_requested_at is not None:
             aggregate_batch_status(batch, now)
@@ -80,10 +195,13 @@ class BatchScheduler:
             or task.id in lease_by_task
             for task in batch.tasks
         )
-        slots = max(0, batch.concurrency - occupied)
+        slots = min(
+            max_assignments,
+            max(0, batch.concurrency - occupied),
+        )
         unreserved = [task for task in queued if task.id not in lease_by_task]
         if slots == 0:
-            self._set_reason(unreserved, "waiting_for_capacity")
+            self._set_reason(unreserved, "waiting_for_batch_capacity")
             self.db.commit()
             return []
 
@@ -153,6 +271,33 @@ class BatchScheduler:
             self._set_reason(remaining, reason)
             self.db.commit()
         return newly_assigned
+
+    @staticmethod
+    def _rotate_businesses(
+        business_ids: list[str],
+        start_after_business_id: str | None,
+    ) -> list[str]:
+        if start_after_business_id not in business_ids:
+            return business_ids
+        start = business_ids.index(start_after_business_id) + 1
+        return business_ids[start:] + business_ids[:start]
+
+    @staticmethod
+    def _set_capacity_reason(
+        batches: list[TaskBatch],
+        occupied_task_ids: set[str],
+        reason: str,
+    ) -> None:
+        for batch in batches:
+            BatchScheduler._set_reason(
+                [
+                    task
+                    for task in batch.tasks
+                    if task.execution_status == ExecutionStatus.QUEUED
+                    and task.id not in occupied_task_ids
+                ],
+                reason,
+            )
 
     def _handle_all_unavailable(
         self,

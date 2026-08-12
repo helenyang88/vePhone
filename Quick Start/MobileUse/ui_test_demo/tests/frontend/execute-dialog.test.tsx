@@ -163,6 +163,12 @@ describe("ExecuteDialog", () => {
     fireEvent.change(screen.getByLabelText("CallbackInfo（JSON 对象）"), { target: { value: '{"url":"https://callback.example.com"}' } });
     fireEvent.change(screen.getByLabelText("OutputSchema（JSON 字符串）"), { target: { value: '{"type":"object"}' } });
     fireEvent.change(screen.getByLabelText("McpJson（JSON 字符串）"), { target: { value: '{"mcpServers":{"amap":{"url":"https://mcp.example.com"}}}' } });
+    const headers = screen.getByLabelText("请求 Header（JSON 对象）");
+    expect(headers).toHaveAttribute(
+      "placeholder",
+      '{"X-Env":"test","X-Request-Source":"mua"}',
+    );
+    fireEvent.change(headers, { target: { value: '{"X-Env":"test"}' } });
     await user.type(screen.getByLabelText("GpsInfo"), "116.397128,39.916527,50,0,0,10");
     await user.click(screen.getByRole("button", { name: /开始执行/ }));
 
@@ -184,10 +190,39 @@ describe("ExecuteDialog", () => {
           tos_region: "cn-beijing",
           screen_record: true,
           mcp_json: '{"mcpServers":{"amap":{"url":"https://mcp.example.com"}}}',
+          request_headers: { "X-Env": "test" },
           gps_info: "116.397128,39.916527,50,0,0,10",
         }),
       }),
     );
+  });
+
+  it("拒绝保留请求 Header", async () => {
+    server.use(
+      http.post("/api/v1/pod-pool/refresh", () => HttpResponse.json(refreshedPool)),
+    );
+    const onConfirm = vi.fn();
+
+    render(
+      <ExecuteDialog
+        open
+        caseTitle="打开抖音APP"
+        onClose={vi.fn()}
+        onConfirm={onConfirm}
+      />,
+    );
+
+    await screen.findByText("Fresh Phone");
+    await user.click(screen.getByRole("radio", { name: "自定义本次执行配置" }));
+    fireEvent.change(screen.getByLabelText("请求 Header（JSON 对象）"), {
+      target: { value: '{"Authorization":"Bearer blocked"}' },
+    });
+    await user.click(screen.getByRole("button", { name: /开始执行/ }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "请求 Header 包含不允许覆盖的保留字段：Authorization",
+    );
+    expect(onConfirm).not.toHaveBeenCalled();
   });
 
   it("允许时展示用例默认配置选项并提交 case_default 模式", async () => {

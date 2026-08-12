@@ -2,17 +2,26 @@ node_modules/
 .venv/
 .pytest_cache/
 .ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
 .DS_Store
 dist/
 build/
 data/
 .env
 .env.local
+.env.*
+!.env.example
 *.log
+*.pid
 .vscode/
 .idea/
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
+.python-version
 .next/
 coverage/
 .superpowers/
@@ -26,17 +35,24 @@ blob-report/
 *.db-shm
 *.sqlite
 *.sqlite3
+*.prof
+*.trace
 
 # Local temp artifacts
 .tmp/
 tmp-*.mjs
 tmp-*.png
+*.tmp
+*.bak
+*.swp
+*.swo
 
 # Generated UI/prototype artifacts
 floating-ui-showcase/
 
 # Local agent/tooling artifacts
 .agents/
+AGENTS.md
 skills-lock.json
 
 # Local development reports
@@ -44,3 +60,16 @@ sdd/
 
 # Local planning artifacts
 /docs/superpowers/
+docs/devbox-systemd-deployment.md
+
+# Local screenshots / recordings / exported artifacts
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.webp
+*.mp4
+*.mov
+*.webm
+exports/
+artifacts/

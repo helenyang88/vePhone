@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Request
 
-from mua_platform.api.deps import AdminUser, CsrfSession, Database
+from mua_platform.api.deps import AdminUser, CsrfSession, CurrentBusiness, Database
 from mua_platform.api.errors import api_error
 from mua_platform.pods.repository import PodRepository
 from mua_platform.pods.service import PodDiscoveryError, PodPoolService
@@ -27,8 +27,9 @@ def get_settings(
     request: Request,
     db: Database,
     _admin: AdminUser,
+    business: CurrentBusiness,
 ) -> dict:
-    return _service(request, db).get_public_settings()
+    return _service(request, db).get_public_settings(business.id)
 
 
 @router.put("/runner")
@@ -37,10 +38,11 @@ async def update_runner(
     request: Request,
     db: Database,
     user: AdminUser,
+    business: CurrentBusiness,
     _csrf_session: CsrfSession,
 ) -> dict:
     async with request.app.state.runner_settings_lock:
-        return await _update_runner_locked(payload, request, db, user.id)
+        return await _update_runner_locked(payload, request, db, user.id, business.id)
 
 
 async def _update_runner_locked(
@@ -48,11 +50,12 @@ async def _update_runner_locked(
     request: Request,
     db: Database,
     actor_user_id: int,
+    business_id: str,
 ) -> dict:
     service = _service(request, db)
-    previous_mode = service.get_runner_config().mode
+    previous_mode = service.get_runner_config(business_id).mode
     try:
-        config = service.validate_runner(payload)
+        config = service.validate_runner(payload, business_id)
     except RunnerSettingsValidationError as exc:
         raise api_error(
             422,
@@ -75,7 +78,11 @@ async def _update_runner_locked(
         try:
             await pool.refresh(
                 config,
-                before_sync=lambda: service.update_runner(payload, actor_user_id),
+                before_sync=lambda: service.update_runner(
+                    payload,
+                    actor_user_id,
+                    business_id,
+                ),
             )
         except PodDiscoveryError as exc:
             db.rollback()
@@ -85,8 +92,8 @@ async def _update_runner_locked(
                 "Pod pool discovery failed",
                 {"remote_request_id": exc.request_id} if exc.request_id else {},
             ) from exc
-        result = service.get_public_settings()
+        result = service.get_public_settings(business_id)
     else:
-        result = service.update_runner(payload, actor_user_id)
+        result = service.update_runner(payload, actor_user_id, business_id)
         db.commit()
     return result

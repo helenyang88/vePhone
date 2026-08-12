@@ -1,0 +1,34 @@
+{
+  "ResponseMetadata": {
+    "RequestId": "req-step-finished",
+    "Action": "ListAgentRunCurrentStep",
+    "Version": "2023-08-01",
+    "Service": "ipaas",
+    "Region": "cn-north-1"
+  },
+  "Result": {
+    "Results": [
+      {
+        "Action": "tap",
+        "Param": {
+          "x": 360,
+          "y": 760
+        },
+        "StepResult": {
+          "Result": "首页已打开"
+        },
+        "Timestamp": 1767225600000
+      },
+      {
+        "Action": "finished",
+        "Param": {
+          "content": "任务执行完成"
+        },
+        "StepResult": {
+          "Result": "finished"
+        },
+        "Timestamp": 1767225601000
+      }
+    ]
+  }
+}

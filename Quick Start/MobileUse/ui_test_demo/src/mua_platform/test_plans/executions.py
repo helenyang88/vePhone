@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from mua_platform.business.models import DEFAULT_BUSINESS_ID
 from mua_platform.settings.schemas import AgentRuntimeOptions
 from mua_platform.tasks.batches import TaskBatchService
 from mua_platform.tasks.execution_config import public_execution_config
@@ -123,8 +124,9 @@ class PlanExecutionService:
         runner_type: str,
         config_snapshot: dict[str, Any],
         device_wait_timeout_seconds: int,
+        business_id: str = DEFAULT_BUSINESS_ID,
     ) -> PlanExecutionCreationResult:
-        plan = TestPlanService(self.db).get(plan_id)
+        plan = TestPlanService(self.db).get(plan_id, business_id)
         if plan is None:
             raise PlanExecutionNotFoundError("test_plan_not_found")
 
@@ -145,6 +147,7 @@ class PlanExecutionService:
                 runner_type=runner_type,
                 config_snapshot=config_snapshot,
                 device_wait_timeout_seconds=device_wait_timeout_seconds,
+                business_id=business_id,
                 commit=False,
             )
             if batch_result.disposition == "existing":
@@ -166,6 +169,7 @@ class PlanExecutionService:
 
             execution = PlanExecution(
                 id=f"execution_{uuid4().hex}",
+                business_id=business_id,
                 test_plan_id=plan.id,
                 task_batch_id=batch_result.batch.id,
                 plan_name_snapshot=plan.name,

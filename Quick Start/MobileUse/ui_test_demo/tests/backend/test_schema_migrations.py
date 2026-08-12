@@ -115,6 +115,59 @@ def _enable_sqlite_foreign_keys(dbapi_connection, _connection_record) -> None:
     cursor.close()
 
 
+def test_business_space_concurrency_limit_is_added_to_legacy_schema():
+    engine = create_engine("sqlite://")
+    try:
+        with engine.begin() as connection:
+            connection.execute(
+                text(
+                    """
+                    CREATE TABLE business_spaces (
+                        id VARCHAR(40) NOT NULL PRIMARY KEY,
+                        name VARCHAR(100) NOT NULL,
+                        name_key VARCHAR(100) NOT NULL,
+                        description TEXT,
+                        is_default BOOLEAN NOT NULL,
+                        created_by VARCHAR(100) NOT NULL,
+                        created_at DATETIME NOT NULL,
+                        updated_at DATETIME NOT NULL,
+                        archived_at DATETIME
+                    )
+                    """
+                )
+            )
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO business_spaces (
+                        id, name, name_key, description, is_default,
+                        created_by, created_at, updated_at, archived_at
+                    )
+                    VALUES (
+                        'biz_default', '默认业务', '默认业务', NULL, 1,
+                        'system', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, NULL
+                    )
+                    """
+                )
+            )
+
+        ensure_schema_migrations(engine)
+
+        columns = {
+            column["name"] for column in inspect(engine).get_columns("business_spaces")
+        }
+        assert "task_concurrency_limit" in columns
+        with engine.connect() as connection:
+            assert connection.execute(
+                text(
+                    "SELECT task_concurrency_limit FROM business_spaces "
+                    "WHERE id = 'biz_default'"
+                )
+            ).scalar_one() == 4
+    finally:
+        engine.dispose()
+
+
 def _create_migrated_foreign_key_engine():
     engine = create_engine("sqlite://")
     event.listen(engine, "connect", _enable_sqlite_foreign_keys)

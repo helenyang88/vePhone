@@ -20,6 +20,7 @@ MOBILE_USE_CONFIG = {
     "ark_api_key": "ark-value",
     "tos_bucket": "bucket-name",
     "tos_region": "cn-beijing",
+    "request_headers": {"X-Env": "test", "X-Secret": "header-secret"},
 }
 
 
@@ -52,6 +53,7 @@ def test_runner_settings_default_to_mobile_use_and_hide_unconfigured_values(auth
             "mcp_json": None,
             "max_output_tokens": None,
             "gps_info": None,
+            "request_headers": {"configured": False, "names": []},
         },
     }
 
@@ -72,8 +74,13 @@ def test_runner_settings_are_replace_only_and_masked(authenticated_client):
     }
     assert body["mobile_use"]["secret_access_key"] == {"configured": True}
     assert body["mobile_use"]["ark_api_key"] == {"configured": True}
+    assert body["mobile_use"]["request_headers"] == {
+        "configured": True,
+        "names": ["X-Env", "X-Secret"],
+    }
     assert "secret-value" not in serialized
     assert "ark-value" not in serialized
+    assert "header-secret" not in serialized
 
     retained = authenticated_client.put(
         "/api/v1/settings/runner",
@@ -85,6 +92,125 @@ def test_runner_settings_are_replace_only_and_masked(authenticated_client):
     reread = authenticated_client.get("/api/v1/settings")
     assert reread.json()["mobile_use"]["access_key_id"]["hint"] == "AKLT****WXYZ"
     assert reread.json()["mobile_use"]["product_id"] == "prod_123"
+    assert reread.json()["mobile_use"]["request_headers"] == {
+        "configured": True,
+        "names": ["X-Env", "X-Secret"],
+    }
+
+
+def test_runner_settings_are_scoped_by_business(authenticated_client):
+    created = authenticated_client.post(
+        "/api/v1/business-spaces",
+        json={"name": "搜索业务"},
+    )
+    assert created.status_code == 201
+    search_business_id = created.json()["id"]
+
+    default_saved = authenticated_client.put(
+        "/api/v1/settings/runner",
+        json={
+            "mode": "mobile_use",
+            "mobile_use": {
+                **MOBILE_USE_CONFIG,
+                "product_id": "product-default",
+                "request_headers": {"X-Biz": "default"},
+            },
+        },
+    )
+    assert default_saved.status_code == 200
+
+    authenticated_client.headers["X-Business-Id"] = search_business_id
+    try:
+        search_saved = authenticated_client.put(
+            "/api/v1/settings/runner",
+            json={
+                "mode": "mobile_use",
+                "mobile_use": {
+                    **MOBILE_USE_CONFIG,
+                    "product_id": "product-search",
+                    "request_headers": {"X-Biz": "search"},
+                },
+            },
+        )
+        assert search_saved.status_code == 200
+        assert search_saved.json()["mobile_use"]["product_id"] == "product-search"
+
+        search_read = authenticated_client.get("/api/v1/settings")
+        assert search_read.status_code == 200
+        assert search_read.json()["mobile_use"]["product_id"] == "product-search"
+        assert search_read.json()["mobile_use"]["request_headers"] == {
+            "configured": True,
+            "names": ["X-Biz"],
+        }
+    finally:
+        authenticated_client.headers.pop("X-Business-Id", None)
+
+    default_read = authenticated_client.get("/api/v1/settings")
+    assert default_read.status_code == 200
+    assert default_read.json()["mobile_use"]["product_id"] == "product-default"
+    assert default_read.json()["mobile_use"]["request_headers"] == {
+        "configured": True,
+        "names": ["X-Biz"],
+    }
+
+
+def test_runner_settings_reject_duplicate_product_id_across_businesses(
+    authenticated_client,
+):
+    created = authenticated_client.post(
+        "/api/v1/business-spaces",
+        json={"name": "重复 Product 业务"},
+    )
+    assert created.status_code == 201
+    duplicate_business_id = created.json()["id"]
+
+    first = authenticated_client.put(
+        "/api/v1/settings/runner",
+        json={
+            "mode": "mobile_use",
+            "mobile_use": {
+                **MOBILE_USE_CONFIG,
+                "product_id": "product-unique",
+            },
+        },
+    )
+    assert first.status_code == 200
+
+    authenticated_client.headers["X-Business-Id"] = duplicate_business_id
+    try:
+        duplicate = authenticated_client.put(
+            "/api/v1/settings/runner",
+            json={
+                "mode": "mobile_use",
+                "mobile_use": {
+                    **MOBILE_USE_CONFIG,
+                    "product_id": "product-unique",
+                },
+            },
+        )
+    finally:
+        authenticated_client.headers.pop("X-Business-Id", None)
+
+    assert duplicate.status_code == 422
+    assert duplicate.json()["error"]["code"] == "runner_product_id_conflict"
+    assert duplicate.json()["error"]["details"] == {"field": "product_id"}
+
+
+def test_runner_settings_reject_reserved_request_headers(authenticated_client):
+    response = authenticated_client.put(
+        "/api/v1/settings/runner",
+        json={
+            "mode": "mobile_use",
+            "mobile_use": {
+                **MOBILE_USE_CONFIG,
+                "request_headers": {"Authorization": "Bearer blocked"},
+            },
+        },
+    )
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "runner_setting_value_invalid"
+    assert response.json()["error"]["details"] == {"field": "request_headers"}
 
 
 def test_short_access_key_is_configured_without_exposing_a_partial_hint(

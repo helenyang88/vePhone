@@ -44,6 +44,14 @@ const task = {
     mcp_json: "{\"mcpServers\":{\"amap\":{\"url\":\"https://mcp.example.com\"}}}",
     max_output_tokens: 2048,
     gps_info: "116.397128,39.916527,50,0,0,10",
+    request_headers: {
+      configured: true,
+      names: ["X-Env", "X-Api-Key"],
+      items: [
+        { name: "X-Env", value: "staging" },
+        { name: "X-Api-Key", value: "sk_l***cdef" },
+      ],
+    },
   },
   execution_status: "result_ready",
   verdict: "pass",
@@ -208,6 +216,25 @@ it("renders result-first overview with four KPIs, carousel screenshots and separ
   expect(within(configCard!).getByText("采集能力")).toBeVisible();
   expect(within(configCard!).getByText("存储与扩展")).toBeVisible();
   expect(within(configCard!).getByText("456 s")).toBeVisible();
+  const headerRow = within(configCard!).getByText("请求 Header")
+    .closest(".runtime-config-row");
+  expect(headerRow).not.toBeNull();
+  const headerButton = within(headerRow as HTMLElement).getByRole("button", {
+    name: "查看请求 Header",
+  });
+  expect(headerButton).toHaveTextContent("已设置");
+  await user.click(headerButton);
+  const headerDialog = await screen.findByRole("dialog", { name: "请求 Header" });
+  expect(within(headerDialog).getByText("X-Env")).toBeVisible();
+  expect(within(headerDialog).getByText("staging")).toBeVisible();
+  expect(within(headerDialog).getByText("X-Api-Key")).toBeVisible();
+  expect(within(headerDialog).getByText("sk_l***cdef")).toBeVisible();
+  expect(within(headerDialog).getByText("Header 值已按敏感字段规则脱敏。"))
+    .toBeVisible();
+  await user.click(
+    within(headerDialog).getByRole("button", { name: "关闭请求 Header 弹窗" }),
+  );
+  expect(screen.queryByRole("dialog", { name: "请求 Header" })).not.toBeInTheDocument();
   expect(within(configCard!).queryByText("custom system prompt")).not.toBeInTheDocument();
 
   const advancedButton = within(configCard!).getByRole("button", {
@@ -231,6 +258,7 @@ it("labels inherited snapshots as global configuration", async () => {
     output_schema: null,
     mcp_json: null,
     gps_info: null,
+    request_headers: { configured: false, names: [] },
   };
   const globalTask = {
     ...task,

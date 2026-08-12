@@ -142,3 +142,7 @@ class TagListResponse(BaseModel):
 
 class ModuleListResponse(BaseModel):
     items: list[str]
+
+
+class CreatorListResponse(BaseModel):
+    items: list[str]

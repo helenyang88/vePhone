@@ -3,6 +3,8 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
+from mua_platform.business.models import BusinessSpace
+from mua_platform.business.service import business_name_key
 from mua_platform.cases.models import TestCase as CaseModel
 from mua_platform.db import Base
 from mua_platform.pods.models import DiscoveredPod
@@ -19,9 +21,25 @@ def _seed_batch(
     pod_ids: list[str],
     concurrency: int,
     task_count: int = 3,
+    batch_id: str | None = None,
+    business_id: str = "biz_default",
+    product_id: str = "product-1",
+    business_limit: int = 4,
 ) -> TaskBatch:
+    suffix = batch_id or strategy
+    if db.get(BusinessSpace, business_id) is None:
+        business = BusinessSpace(
+            id=business_id,
+            name=business_id,
+            name_key=business_name_key(business_id),
+            is_default=business_id == "biz_default",
+            task_concurrency_limit=business_limit,
+            created_by="system",
+        )
+        db.add(business)
     batch = TaskBatch(
-        id=f"batch_{strategy}",
+        id=f"batch_{suffix}",
+        business_id=business_id,
         name="调度测试",
         test_type="regression",
         selection_mode="multi_cases",
@@ -31,15 +49,16 @@ def _seed_batch(
         concurrency=concurrency,
         device_wait_timeout_seconds=300,
         runner_type="mobile_use",
-        config_snapshot={"product_id": "product-1"},
+        config_snapshot={"product_id": product_id},
         execution_status=ExecutionStatus.QUEUED,
-        idempotency_key=f"key-{strategy}",
+        idempotency_key=f"key-{suffix}",
         request_fingerprint="{}",
         created_by="admin",
     )
     for index in range(task_count):
         case = CaseModel(
-            id=f"case_{strategy}_{index}",
+            id=f"case_{suffix}_{index}",
+            business_id=business_id,
             title=f"用例 {index}",
             module="调度",
             content_markdown="- 执行",
@@ -48,7 +67,8 @@ def _seed_batch(
             created_by="admin",
         )
         task = Task(
-            id=f"task_{strategy}_{index}",
+            id=f"task_{suffix}_{index}",
+            business_id=business_id,
             case_id=case.id,
             batch_id=batch.id,
             batch_position=index,
@@ -57,12 +77,12 @@ def _seed_batch(
             scenario=case.title,
             created_by="admin",
             execution_status=ExecutionStatus.QUEUED,
-            idempotency_key=f"task-key-{strategy}-{index}",
+            idempotency_key=f"task-key-{suffix}-{index}",
             request_fingerprint="{}",
             version=1,
         )
         task.runner_config = TaskRunnerConfig(
-            config_snapshot={"product_id": "product-1"}
+            config_snapshot={"product_id": product_id}
         )
         db.add(case)
         batch.tasks.append(task)
@@ -78,10 +98,11 @@ def _seed_pod(
     *,
     status: int = 1,
     discovery_state: str = "active",
+    product_id: str = "product-1",
 ) -> DiscoveredPod:
     pod = DiscoveredPod(
-        id=f"row_{pod_id}",
-        product_id="product-1",
+        id=f"row_{product_id}_{pod_id}",
+        product_id=product_id,
         pod_id=pod_id,
         pod_name=pod_id,
         pod_status_code=status,
@@ -91,6 +112,20 @@ def _seed_pod(
     db.add(pod)
     db.commit()
     return pod
+
+
+def _schedule(
+    db: Session,
+    now: datetime,
+    *,
+    global_limit: int = 16,
+    start_after_business_id: str | None = None,
+) -> list[str]:
+    return BatchScheduler(db).schedule(
+        now,
+        global_limit=global_limit,
+        start_after_business_id=start_after_business_id,
+    ).task_ids
 
 
 def test_automatic_scheduler_reserves_only_batch_concurrency():
@@ -109,14 +144,123 @@ def test_automatic_scheduler_reserves_only_batch_concurrency():
             _seed_pod(db, "pod-b", now)
             _seed_pod(db, "pod-c", now)
 
-            assigned = BatchScheduler(db).schedule(now)
+            assigned = _schedule(db, now)
 
             assert len(assigned) == 2
             leases = list(db.scalars(select(PodLease)))
             assert len(leases) == 2
             assert {lease.task_id for lease in leases} == set(assigned)
             remaining = next(task for task in batch.tasks if task.id not in assigned)
-            assert remaining.queue_reason == "waiting_for_capacity"
+            assert remaining.queue_reason == "waiting_for_batch_capacity"
+    finally:
+        engine.dispose()
+
+
+def test_scheduler_limits_single_business_to_configured_concurrency():
+    engine = create_engine("sqlite://")
+    Base.metadata.create_all(engine)
+    now = datetime(2026, 7, 29, 8, 0, tzinfo=UTC)
+    try:
+        with Session(engine, expire_on_commit=False) as db:
+            _seed_batch(
+                db,
+                strategy="automatic",
+                pod_ids=[],
+                concurrency=8,
+                task_count=6,
+            )
+            for index in range(6):
+                _seed_pod(db, f"pod-{index}", now)
+
+            assigned = _schedule(db, now)
+
+            assert len(assigned) == 4
+    finally:
+        engine.dispose()
+
+
+def test_scheduler_round_robins_businesses_within_global_capacity():
+    engine = create_engine("sqlite://")
+    Base.metadata.create_all(engine)
+    now = datetime(2026, 7, 29, 8, 0, tzinfo=UTC)
+    try:
+        with Session(engine, expire_on_commit=False) as db:
+            first = _seed_batch(
+                db,
+                strategy="automatic",
+                pod_ids=[],
+                concurrency=4,
+                task_count=4,
+                batch_id="first",
+                business_id="biz_first",
+                product_id="product-first",
+            )
+            second = _seed_batch(
+                db,
+                strategy="automatic",
+                pod_ids=[],
+                concurrency=4,
+                task_count=4,
+                batch_id="second",
+                business_id="biz_second",
+                product_id="product-second",
+            )
+            for index in range(4):
+                _seed_pod(
+                    db,
+                    f"first-{index}",
+                    now,
+                    product_id="product-first",
+                )
+                _seed_pod(
+                    db,
+                    f"second-{index}",
+                    now,
+                    product_id="product-second",
+                )
+
+            result = BatchScheduler(db).schedule(now, global_limit=4)
+
+            assert len(result.task_ids) == 4
+            assigned = set(result.task_ids)
+            assert len(assigned & {task.id for task in first.tasks}) == 2
+            assert len(assigned & {task.id for task in second.tasks}) == 2
+            assert result.last_business_id == "biz_second"
+    finally:
+        engine.dispose()
+
+
+def test_scheduler_counts_existing_leases_against_global_capacity():
+    engine = create_engine("sqlite://")
+    Base.metadata.create_all(engine)
+    now = datetime(2026, 7, 29, 8, 0, tzinfo=UTC)
+    try:
+        with Session(engine, expire_on_commit=False) as db:
+            batch = _seed_batch(
+                db,
+                strategy="automatic",
+                pod_ids=[],
+                concurrency=4,
+                task_count=4,
+            )
+            for index in range(4):
+                _seed_pod(db, f"pod-{index}", now)
+            leased_task = batch.tasks[0]
+            db.add(
+                PodLease(
+                    pod_id="product-1:pod-0",
+                    task_id=leased_task.id,
+                    worker_id="worker:test",
+                    expires_at=now + timedelta(minutes=5),
+                    version=1,
+                )
+            )
+            db.commit()
+
+            assigned = _schedule(db, now, global_limit=2)
+
+            assert len(assigned) == 1
+            assert assigned[0] != leased_task.id
     finally:
         engine.dispose()
 
@@ -136,7 +280,7 @@ def test_released_capacity_assigns_next_batch_child():
             _seed_pod(db, "pod-a", now)
             _seed_pod(db, "pod-b", now)
 
-            first_wave = BatchScheduler(db).schedule(now)
+            first_wave = _schedule(db, now)
             assert len(first_wave) == 2
             completed_id = first_wave[0]
             repository = SQLiteTaskRepository(db)
@@ -151,7 +295,8 @@ def test_released_capacity_assigns_next_batch_child():
                 reason="terminal",
             )
 
-            second_wave = BatchScheduler(db).schedule(
+            second_wave = _schedule(
+                db,
                 now + timedelta(seconds=1)
             )
 
@@ -216,7 +361,7 @@ def test_specified_busy_pod_waits_without_unavailable_timer():
             )
             db.commit()
 
-            assert BatchScheduler(db).schedule(now) == []
+            assert _schedule(db, now) == []
             db.refresh(batch)
             db.refresh(batch.tasks[0])
             assert batch.unavailable_since is None
@@ -241,7 +386,7 @@ def test_partial_specified_unavailability_uses_remaining_pod():
             _seed_pod(db, "pod-offline", now, status=2)
             _seed_pod(db, "pod-online", now)
 
-            assigned = BatchScheduler(db).schedule(now)
+            assigned = _schedule(db, now)
 
             assert len(assigned) == 1
             lease = db.scalar(select(PodLease))
@@ -268,14 +413,14 @@ def test_all_specified_pods_unavailable_fail_queued_children_after_timeout():
             )
             _seed_pod(db, "pod-offline", now, status=2)
 
-            assert BatchScheduler(db).schedule(now) == []
+            assert _schedule(db, now) == []
             db.refresh(batch)
             assert batch.unavailable_since is not None
             assert {task.queue_reason for task in batch.tasks} == {
                 "device_temporarily_unavailable"
             }
 
-            assert BatchScheduler(db).schedule(now + timedelta(seconds=301)) == []
+            assert _schedule(db, now + timedelta(seconds=301)) == []
             for task in batch.tasks:
                 db.refresh(task)
                 assert task.execution_status == ExecutionStatus.RESULT_READY
@@ -300,7 +445,7 @@ def test_stale_by_last_seen_starts_specified_unavailable_timer():
             )
             _seed_pod(db, "pod-stale", now - timedelta(minutes=4))
 
-            assert BatchScheduler(db).schedule(now) == []
+            assert _schedule(db, now) == []
 
             db.refresh(batch)
             db.refresh(batch.tasks[0])
@@ -332,13 +477,14 @@ def test_cancelled_batch_converges_after_last_running_child_finishes():
             batch.tasks[1].execution_status = ExecutionStatus.CANCELLED
             db.commit()
 
-            assert BatchScheduler(db).schedule(now) == []
+            assert _schedule(db, now) == []
             db.refresh(batch)
             assert batch.execution_status == ExecutionStatus.RUNNING
 
             batch.tasks[0].execution_status = ExecutionStatus.CANCELLED
             db.commit()
-            assert BatchScheduler(db).schedule(
+            assert _schedule(
+                db,
                 now + timedelta(seconds=1)
             ) == []
             db.refresh(batch)

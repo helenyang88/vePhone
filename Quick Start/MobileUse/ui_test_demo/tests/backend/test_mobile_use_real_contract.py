@@ -214,6 +214,7 @@ def test_real_contract_fixtures_preserve_universal_wrappers_and_enums():
 def test_real_contract_sdk_spy_preserves_start_action_and_body(monkeypatch):
     calls = []
     configurations = []
+    clients = []
 
     class Configuration:
         def __init__(self) -> None:
@@ -227,6 +228,15 @@ def test_real_contract_sdk_spy_preserves_start_action_and_body(monkeypatch):
         def flat(self):
             return self.body
 
+    class ApiClient:
+        def __init__(self, configuration) -> None:
+            self.configuration = configuration
+            self.default_headers = {}
+            clients.append(self)
+
+        def set_default_header(self, name, value) -> None:
+            self.default_headers[name] = value
+
     class UniversalApi:
         def __init__(self, _client) -> None:
             pass
@@ -237,7 +247,7 @@ def test_real_contract_sdk_spy_preserves_start_action_and_body(monkeypatch):
 
     fake_sdk = SimpleNamespace(
         Configuration=Configuration,
-        ApiClient=lambda configuration: configuration,
+        ApiClient=ApiClient,
         UniversalApi=UniversalApi,
         UniversalInfo=lambda **kwargs: SimpleNamespace(**kwargs),
         Flatten=Flatten,
@@ -250,7 +260,9 @@ def test_real_contract_sdk_spy_preserves_start_action_and_body(monkeypatch):
     }
 
     response = call_universal(
-        mobile_config(),
+        mobile_config().model_copy(
+            update={"request_headers": {"X-Env": "test", "X-Source": "mua"}}
+        ),
         UniversalRequest(
             service="ipaas",
             action="RunAgentTaskOneStep",
@@ -275,6 +287,7 @@ def test_real_contract_sdk_spy_preserves_start_action_and_body(monkeypatch):
     assert flattened_body["UseBase64Screenshot"] is True
     assert flattened_body["IsScreenRecord"] is False
     assert configurations[0].auto_retry is False
+    assert clients[0].default_headers == {"X-Env": "test", "X-Source": "mua"}
 
 
 @pytest.mark.asyncio

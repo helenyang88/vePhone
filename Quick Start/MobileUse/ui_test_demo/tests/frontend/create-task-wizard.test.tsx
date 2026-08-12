@@ -130,8 +130,8 @@ it("creates a multi-case batch through the four-step wizard", async () => {
   await user.click(screen.getByRole("button", { name: "下一步：设备策略" }));
 
   await user.click(screen.getByRole("radio", { name: /指定设备/ }));
-  await user.clear(screen.getByLabelText("批次并发数"));
-  await user.type(screen.getByLabelText("批次并发数"), "2");
+  await user.clear(screen.getByLabelText("批次设备并发数"));
+  await user.type(screen.getByLabelText("批次设备并发数"), "2");
   await user.click(screen.getByRole("checkbox", { name: /云机 A/ }));
   await user.click(screen.getByRole("button", { name: "下一步：确认提交" }));
 

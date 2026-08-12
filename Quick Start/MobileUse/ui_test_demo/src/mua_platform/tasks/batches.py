@@ -10,6 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
+from mua_platform.business.models import DEFAULT_BUSINESS_ID
 from mua_platform.cases.models import TestCase
 from mua_platform.tasks.models import Task, TaskBatch, TaskRunnerConfig
 from mua_platform.tasks.repository import SQLiteTaskRepository
@@ -41,6 +42,7 @@ class TaskBatchService:
         runner_type: str,
         config_snapshot: dict[str, Any],
         device_wait_timeout_seconds: int,
+        business_id: str = DEFAULT_BUSINESS_ID,
         commit: bool = True,
     ) -> TaskBatchCreationResult:
         fingerprint = _canonical_json(
@@ -54,6 +56,7 @@ class TaskBatchService:
             self.db.scalars(
                 select(TestCase).where(
                     TestCase.id.in_(payload.case_ids),
+                    TestCase.business_id == business_id,
                     TestCase.deleted_at.is_(None),
                 )
             )
@@ -74,6 +77,7 @@ class TaskBatchService:
 
         batch = TaskBatch(
             id=batch_id,
+            business_id=business_id,
             name=payload.name.strip(),
             test_type=payload.test_type,
             selection_mode=payload.selection_mode,
@@ -107,6 +111,7 @@ class TaskBatchService:
                 task_snapshot.update(case.default_agent_options)
             task = Task(
                 id=f"task_{uuid4().hex}",
+                business_id=business_id,
                 case_id=case.id,
                 batch_id=batch.id,
                 batch_position=position,
@@ -150,19 +155,27 @@ class TaskBatchService:
             self.db.rollback()
             raise
 
-    def get(self, batch_id: str) -> TaskBatch | None:
+    def get(
+        self,
+        batch_id: str,
+        business_id: str | None = None,
+    ) -> TaskBatch | None:
+        filters = [TaskBatch.id == batch_id]
+        if business_id is not None:
+            filters.append(TaskBatch.business_id == business_id)
         return self.db.scalar(
             select(TaskBatch)
             .options(selectinload(TaskBatch.tasks))
-            .where(TaskBatch.id == batch_id)
+            .where(*filters)
         )
 
     def cancel(
         self,
         batch_id: str,
         now: datetime,
+        business_id: str | None = None,
     ) -> TaskBatchCancelResult:
-        batch = self.get(batch_id)
+        batch = self.get(batch_id, business_id)
         if batch is None:
             raise ValueError(f"task_batch_not_found:{batch_id}")
         if batch.execution_status in {

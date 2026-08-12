@@ -3,6 +3,8 @@ from typing import Any, Mapping
 
 
 _PUBLIC_FIELDS = (
+    "business_id",
+    "business_name_snapshot",
     "thread_id",
     "product_id",
     "pod_id",
@@ -20,6 +22,7 @@ _PUBLIC_FIELDS = (
     "mcp_json",
     "max_output_tokens",
     "gps_info",
+    "request_headers",
 )
 _JSON_FIELDS = frozenset({"mcp_json", "output_schema"})
 _SENSITIVE_KEY_PARTS = (
@@ -45,12 +48,40 @@ def public_execution_config(snapshot: Mapping[str, Any] | None) -> dict[str, Any
     }
     for field in _PUBLIC_FIELDS:
         value = values.get(field)
-        if field in _JSON_FIELDS:
+        if field == "request_headers":
+            value = _header_state(value)
+        elif field in _JSON_FIELDS:
             value = _sanitize_json_string(value)
         else:
             value = _sanitize_value(value)
         result[field] = value
     return result
+
+
+def _header_state(value: object) -> dict[str, object]:
+    if not isinstance(value, Mapping) or not value:
+        return {"configured": False, "names": [], "items": []}
+    items = [
+        {
+            "name": str(key),
+            "value": _sanitize_header_value(str(key), item),
+        }
+        for key, item in value.items()
+    ]
+    return {
+        "configured": True,
+        "names": [item["name"] for item in items],
+        "items": items,
+    }
+
+
+def _sanitize_header_value(name: str, value: object) -> str:
+    text = str(value)
+    if not _is_sensitive_key(name):
+        return text
+    if len(text) <= 8:
+        return "***"
+    return f"{text[:4]}***{text[-4:]}"
 
 
 def _sanitize_json_string(value: object) -> object:

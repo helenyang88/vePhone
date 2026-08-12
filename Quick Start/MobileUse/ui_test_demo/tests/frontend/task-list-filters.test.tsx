@@ -191,6 +191,8 @@ it("filters by status and result from custom selects and copies task id", async 
         page_size: 20,
       });
     }),
+    http.get("/api/v1/tasks/operators", () =>
+      HttpResponse.json({ items: ["admin", "reviewer"] })),
   );
 
   const writeText = vi.fn().mockResolvedValue(undefined);
@@ -206,7 +208,7 @@ it("filters by status and result from custom selects and copies task id", async 
   await user.click(within(row).getByRole("button", { name: "复制任务ID" }));
   await waitFor(() => expect(writeText).toHaveBeenCalledWith("task_alpha"));
 
-  expect(screen.queryByLabelText("操作者筛选")).not.toBeInTheDocument();
+  expect(screen.getByRole("combobox", { name: "操作者筛选" })).toHaveTextContent("全部操作者");
 
   await user.click(screen.getByRole("combobox", { name: "状态筛选" }));
   await user.click(screen.getByRole("option", { name: "执行中" }));
@@ -216,6 +218,8 @@ it("filters by status and result from custom selects and copies task id", async 
   await user.click(screen.getByRole("option", { name: "复核失败" }));
   await user.click(screen.getByRole("combobox", { name: "时间筛选" }));
   await user.click(screen.getByRole("option", { name: "最近3天" }));
+  await user.click(screen.getByRole("combobox", { name: "操作者筛选" }));
+  await user.click(screen.getByRole("option", { name: "reviewer" }));
 
   await waitFor(() =>
     expect(seen.some((entry) => entry.status === "running")).toBe(true),
@@ -232,7 +236,7 @@ it("filters by status and result from custom selects and copies task id", async 
         (entry) => entry.status === "running"
           && entry.verdict === "fail"
           && entry.reviewResult === "fail"
-          && entry.operator === null,
+          && entry.operator === "reviewer",
       ),
     ).toBe(true),
   );

@@ -3,7 +3,7 @@ from datetime import datetime
 
 from fastapi import APIRouter, HTTPException, Request
 
-from mua_platform.api.deps import CsrfSession, CurrentUser, Database
+from mua_platform.api.deps import CsrfSession, CurrentBusiness, CurrentUser, Database
 from mua_platform.api.errors import api_error
 from mua_platform.pods.repository import PodRepository
 from mua_platform.pods.service import PodDiscoveryError, PodPoolService
@@ -86,10 +86,11 @@ def list_pod_pool(
     request: Request,
     db: Database,
     _user: CurrentUser,
+    business: CurrentBusiness,
 ) -> dict:
     pool, settings = _service(request, db)
     try:
-        snapshot = pool.list_cached(settings.get_runner_config())
+        snapshot = pool.list_cached(settings.get_runner_config(business.id))
     except ValueError as exc:
         raise api_error(
             409,
@@ -105,11 +106,12 @@ async def get_pod_detail(
     request: Request,
     db: Database,
     _user: CurrentUser,
+    business: CurrentBusiness,
 ) -> dict:
     pool, settings = _service(request, db)
     repo = PodRepository(db)
     try:
-        config = settings.get_runner_config()
+        config = settings.get_runner_config(business.id)
     except ValueError as exc:
         raise api_error(
             409,
@@ -155,11 +157,12 @@ async def refresh_pod_pool(
     request: Request,
     db: Database,
     _user: CurrentUser,
+    business: CurrentBusiness,
     _csrf_session: CsrfSession,
 ) -> dict:
     pool, settings = _service(request, db)
     try:
-        snapshot = await pool.refresh(settings.get_runner_config())
+        snapshot = await pool.refresh(settings.get_runner_config(business.id))
     except ValueError as exc:
         raise api_error(
             409,
@@ -182,12 +185,13 @@ async def create_pod_stream_session(
     request: Request,
     db: Database,
     user: CurrentUser,
+    business: CurrentBusiness,
     _csrf_session: CsrfSession,
 ) -> dict:
     pool, settings = _service(request, db)
     repo = PodRepository(db)
     try:
-        config = settings.get_runner_config()
+        config = settings.get_runner_config(business.id)
     except ValueError as exc:
         raise api_error(
             409,

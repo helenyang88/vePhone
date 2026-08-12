@@ -4,7 +4,7 @@
 
 云手机-PaaS服务适用于云手机租赁与试用场景，客户可以在任何终端（Android、iOS、Web/H5、Windows）上远程实时地控制云手机、即点即用在云端执行的应用，以更高性价比执行多类计算任务，开展云办公、应用仿真测试等业务。
 
-开发者无需适配不同的软硬件平台，即可将应用部署到服务端提供云手机服务。本仓库提供 Android、iOS、Web/H5、Windows 客户端 Quick Start Demo 工程文件下载，帮助开发者快速搭建示例，体验云手机服务。
+开发者无需适配不同的软硬件平台，即可将应用部署到服务端提供云手机服务。本仓库提供 Android、iOS、Web/H5、Windows 客户端 Quick Start Demo 工程文件下载，并提供 Mobile Use 与 Computer Use Agent 示例，帮助开发者快速搭建示例并体验云端自动化能力。
 
 ## 接入文档
 
@@ -16,6 +16,8 @@
 |iOS |[下载]( https://www.volcengine.com/docs/6394/75741) |[文档]( https://www.volcengine.com/docs/6394/75743) |[文档]( https://www.volcengine.com/docs/6394/75747) |
 |Web/H5 |[下载]( https://www.volcengine.com/docs/6394/75741) |[文档]( https://www.volcengine.com/docs/6394/75744) |[文档]( https://www.volcengine.com/docs/6394/75747) |
 |Windows |[下载]( https://www.volcengine.com/docs/6394/75741) |[文档]( https://www.volcengine.com/docs/6394/1156707) |[文档]( https://www.volcengine.com/docs/6394/75747) |
+|MobileUse |[下载]( https://www.volcengine.com/docs/6394/1783697) |[文档]( https://www.volcengine.com/docs/6394/1783697) |[文档]( https://www.volcengine.com/docs/6394/1953040) |
+|Computer Use Agent |— |[下载]( https://docs.volcengine.com/docs/6394/2548051) |[文档]( https://docs.volcengine.com/docs/6394/2558649) |
 
 # Mobile Use Agent 接入请参考
 
@@ -24,6 +26,16 @@ Open API接口文档：https://www.volcengine.com/docs/6394/1953040?lang=zh
 Skill 获取：
 [find skill](https://findskill.com/volcengine/ACEP/volcengine-ACEP-mobile_use)
 [clawhub](https://clawhub.ai/volcengine-skills/byted-ai-mobileuse-agent)
+
+## Quick Start 目录
+
+- `Quick Start/MobileUse/ui_test_demo/`：Mobile Use 测试平台示例，包含用例、测试计划、任务执行、设备池和结果报告。
+- `Quick Start/ComputerUseAgent/`：Computer Use Agent 接入示例，包含 CUA OpenAPI 配置、任务执行、noVNC 拉流和结果查询。
+
+Computer Use Agent 参考文档：
+
+- [使用指南](https://docs.volcengine.com/docs/6394/2548051?lang=zh)
+- [OpenAPI 概览](https://docs.volcengine.com/docs/6394/2558649?lang=zh)
 
 ## Security and privacy
 

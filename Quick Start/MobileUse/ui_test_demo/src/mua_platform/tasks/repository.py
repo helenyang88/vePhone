@@ -12,6 +12,7 @@ from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from mua_platform.business.models import DEFAULT_BUSINESS_ID
 from mua_platform.cases.models import TestCase
 from mua_platform.pods.models import DiscoveredPod
 from mua_platform.pods.schemas import VerifiedPodAllocation
@@ -220,11 +221,12 @@ class TaskRepository(Protocol):
         verdict: str | None = None,
         review_result: str | None = None,
         search: str | None = None,
+        business_id: str | None = None,
     ) -> tuple[list[Task], int]: ...
 
-    def stats(self) -> dict[str, int]: ...
+    def stats(self, business_id: str | None = None) -> dict[str, int]: ...
 
-    def list_operators(self) -> list[str]: ...
+    def list_operators(self, business_id: str | None = None) -> list[str]: ...
 
     def get_case(self, case_id: str) -> TestCase | None: ...
 
@@ -268,6 +270,7 @@ class SQLiteTaskRepository:
 
         task = Task(
             id=f"task_{uuid4().hex}",
+            business_id=case.business_id or DEFAULT_BUSINESS_ID,
             case_id=case.id,
             script_version_id=None,
             prompt_snapshot=case.content_markdown,
@@ -1203,8 +1206,13 @@ class SQLiteTaskRepository:
         task.version += 1
         return task
 
-    def get(self, task_id: str) -> Task | None:
-        return self.db.get(Task, task_id)
+    def get(self, task_id: str, business_id: str | None = None) -> Task | None:
+        task = self.db.get(Task, task_id)
+        if task is None:
+            return None
+        if business_id is not None and task.business_id != business_id:
+            return None
+        return task
 
     def refresh(self, task_id: str) -> Task:
         self.db.expire_all()
@@ -1225,12 +1233,20 @@ class SQLiteTaskRepository:
         review_result: str | None = None,
         search: str | None = None,
         created_after: datetime | None = None,
+        business_id: str | None = None,
     ) -> tuple[list[Task], int]:
         filters = []
+        if business_id:
+            filters.append(Task.business_id == business_id)
         if case_id:
             filters.append(Task.case_id == case_id)
         if created_by:
-            filters.append(Task.created_by == created_by)
+            filters.append(
+                or_(
+                    Task.created_by == created_by,
+                    Task.reviewed_by == created_by,
+                )
+            )
         if status:
             filters.append(Task.execution_status == status)
         if verdict:
@@ -1270,7 +1286,8 @@ class SQLiteTaskRepository:
         )
         return items, total
 
-    def stats(self) -> dict[str, int]:
+    def stats(self, business_id: str | None = None) -> dict[str, int]:
+        filters = [Task.business_id == business_id] if business_id else []
         (
             total,
             running,
@@ -1301,6 +1318,7 @@ class SQLiteTaskRepository:
                     Task.review_result.in_((Verdict.PASS, Verdict.FAIL)),
                 ),
             )
+            .where(*filters)
         ).one()
         pass_rate = round((passed / completed) * 100) if completed else 0
         manual_review_fail_rate = (
@@ -1338,14 +1356,23 @@ class SQLiteTaskRepository:
         self.db.commit()
         return task
 
-    def list_operators(self) -> list[str]:
-        rows = self.db.scalars(
+    def list_operators(self, business_id: str | None = None) -> list[str]:
+        filters = [Task.business_id == business_id] if business_id else []
+        creators = self.db.scalars(
             select(Task.created_by)
-            .where(Task.created_by.is_not(None), Task.created_by != "")
+            .where(Task.created_by.is_not(None), Task.created_by != "", *filters)
             .distinct()
-            .order_by(Task.created_by)
         ).all()
-        return [operator for operator in rows if isinstance(operator, str)]
+        reviewers = self.db.scalars(
+            select(Task.reviewed_by)
+            .where(Task.reviewed_by.is_not(None), Task.reviewed_by != "", *filters)
+            .distinct()
+        ).all()
+        return sorted(
+            operator
+            for operator in set(creators + reviewers)
+            if isinstance(operator, str)
+        )
 
     def get_case(self, case_id: str) -> TestCase | None:
         return self.db.get(TestCase, case_id)

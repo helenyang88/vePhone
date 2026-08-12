@@ -100,6 +100,10 @@ class TestPlanStatsResponse(BaseModel):
     latest_completed_pass_rate: float
 
 
+class CreatorListResponse(BaseModel):
+    items: list[str]
+
+
 class TagListResponse(BaseModel):
     items: list[TagResponse]
     total: int

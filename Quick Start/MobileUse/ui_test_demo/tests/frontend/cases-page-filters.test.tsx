@@ -252,6 +252,33 @@ it("uses task-list style live search and removes automation level filtering", as
   );
 });
 
+it("filters cases by creator", async () => {
+  const seenCreators: string[] = [];
+  server.use(
+    http.get("/api/v1/cases", ({ request }) => {
+      const creator = new URL(request.url).searchParams.get("created_by");
+      seenCreators.push(creator ?? "");
+      return HttpResponse.json(listOf([
+        makeCase({ id: "case_creator", title: "创建人筛选用例", created_by: creator || "admin" }),
+      ]));
+    }),
+    http.get("/api/v1/cases/tags", () => HttpResponse.json({ items: [] })),
+    http.get("/api/v1/cases/modules", () => HttpResponse.json({ items: [] })),
+    http.get("/api/v1/cases/creators", () =>
+      HttpResponse.json({ items: ["admin", "alice"] })),
+  );
+
+  renderApp("/cases");
+
+  await screen.findByRole("link", { name: "创建人筛选用例" });
+  await user.click(screen.getByRole("combobox", { name: "创建人筛选" }));
+  await user.click(screen.getByRole("option", { name: "alice" }));
+
+  await waitFor(() => expect(seenCreators).toContain("alice"));
+  expect(screen.getByRole("combobox", { name: "创建人筛选" }))
+    .toHaveTextContent("alice");
+});
+
 it("copies the full case id via the copy button", async () => {
   const writeText = vi.fn().mockResolvedValue(undefined);
   Object.defineProperty(navigator, "clipboard", {
@@ -561,21 +588,25 @@ it("restores case filters and pagination from the URL", async () => {
       HttpResponse.json({ items: ["smoke"] })),
     http.get("/api/v1/cases/modules", () =>
       HttpResponse.json({ items: ["登录"] })),
+    http.get("/api/v1/cases/creators", () =>
+      HttpResponse.json({ items: ["admin", "alice"] })),
   );
 
-  renderApp("/cases?page=2&search=示例&module=登录&tag=smoke");
+  renderApp("/cases?page=2&search=示例&module=登录&tag=smoke&created_by=alice");
 
   expect(await screen.findByText("case_deep_link")).toBeVisible();
   expect(screen.getByLabelText("搜索用例")).toHaveValue("示例");
   expect(screen.getByRole("combobox", { name: "模块筛选" })).toHaveTextContent("登录");
   expect(screen.getByRole("combobox", { name: "标签筛选" })).toHaveTextContent("smoke");
+  expect(screen.getByRole("combobox", { name: "创建人筛选" })).toHaveTextContent("alice");
   expect(screen.queryByRole("combobox", { name: "自动化等级筛选" })).not.toBeInTheDocument();
   expect(screen.getByText("第 2 / 2 页")).toBeVisible();
   expect(seenQueries.some((query) =>
     query.includes("page=2")
     && query.includes("search=%E7%A4%BA%E4%BE%8B")
     && query.includes("module=%E7%99%BB%E5%BD%95")
-    && query.includes("tag=smoke"),
+    && query.includes("tag=smoke")
+    && query.includes("created_by=alice"),
   )).toBe(true);
   expect(seenQueries.every((query) => !query.includes("automation_level"))).toBe(true);
 });

@@ -43,7 +43,7 @@ function friendlyRunError(error: unknown): string {
     return "本次运行配置已变化，请重新确认后提交。";
   }
   if (error.code === "concurrency_exceeds_case_count") {
-    return "并发数不能超过计划用例数。";
+    return "设备并发数不能超过计划用例数。";
   }
   return error.message || "运行计划失败，请稍后重试。";
 }
@@ -61,7 +61,7 @@ function formatPodSelectionLimitError(
   selectedCount: number,
   concurrency: number,
 ): string {
-  return `已选择 ${selectedCount} 台设备，超过当前并发数 ${concurrency}。请减少设备数量，或提高并发数后再执行。`;
+  return `已选择 ${selectedCount} 台设备，超过当前设备并发数 ${concurrency}。请减少设备数量，或提高设备并发数后再执行。`;
 }
 
 export function TestPlanRunPage() {
@@ -453,12 +453,12 @@ export function TestPlanRunPage() {
               </label>
             </div>
             <label className="plan-run-field plan-run-concurrency">
-              <span>并发数</span>
+              <span>设备并发数</span>
               <input
                 name="concurrency"
                 autoComplete="off"
                 type="number"
-                aria-label="并发数"
+                aria-label="设备并发数"
                 min={1}
                 max={maxConcurrency}
                 value={concurrency}

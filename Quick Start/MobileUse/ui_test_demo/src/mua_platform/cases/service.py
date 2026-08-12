@@ -11,6 +11,7 @@ from sqlalchemy import case as sql_case
 from sqlalchemy import exists, func, or_, select
 from sqlalchemy.orm import Session
 
+from mua_platform.business.models import DEFAULT_BUSINESS_ID
 from mua_platform.cases.models import CASE_TEMPLATE, TestCase
 from mua_platform.cases.schemas import (
     CaseImportPreviewItem,
@@ -74,9 +75,11 @@ class CaseService:
         self,
         payload: TestCaseCreate,
         created_by: str = "system",
+        business_id: str = DEFAULT_BUSINESS_ID,
     ) -> TestCase:
         case = TestCase(
             id=f"case_{uuid4().hex}",
+            business_id=business_id,
             title=payload.title,
             module=payload.module,
             content_markdown=payload.content_markdown or CASE_TEMPLATE,
@@ -99,10 +102,15 @@ class CaseService:
             self.db.rollback()
             raise
 
-    def get_case(self, case_id: str) -> TestCase | None:
+    def get_case(
+        self,
+        case_id: str,
+        business_id: str = DEFAULT_BUSINESS_ID,
+    ) -> TestCase | None:
         return self.db.scalar(
             select(TestCase).where(
                 TestCase.id == case_id,
+                TestCase.business_id == business_id,
                 TestCase.deleted_at.is_(None),
             )
         )
@@ -180,12 +188,14 @@ class CaseService:
         self,
         case_id: str,
         created_by: str = "system",
+        business_id: str = DEFAULT_BUSINESS_ID,
     ) -> TestCase | None:
-        source = self.get_case(case_id)
+        source = self.get_case(case_id, business_id)
         if source is None:
             return None
         copied = TestCase(
             id=f"case_{uuid4().hex}",
+            business_id=business_id,
             title=f"{source.title[:197]} 副本",
             module=source.module,
             content_markdown=source.content_markdown,
@@ -291,12 +301,14 @@ class CaseService:
         drafts: list[TestCaseCreate],
         *,
         created_by: str,
+        business_id: str = DEFAULT_BUSINESS_ID,
     ) -> list[TestCaseResponse]:
         created: list[TestCase] = []
         try:
             for draft in drafts:
                 case = TestCase(
                     id=f"case_{uuid4().hex}",
+                    business_id=business_id,
                     title=draft.title.strip(),
                     module=draft.module.strip() if draft.module else None,
                     content_markdown=draft.content_markdown,
@@ -320,14 +332,17 @@ class CaseService:
             self.db.rollback()
             raise
 
-    def stats(self) -> dict[str, int]:
-        active_cases = TestCase.deleted_at.is_(None)
+    def stats(self, business_id: str = DEFAULT_BUSINESS_ID) -> dict[str, int]:
+        active_cases = (
+            TestCase.deleted_at.is_(None),
+            TestCase.business_id == business_id,
+        )
         total = self.db.scalar(
-            select(func.count(TestCase.id)).where(active_cases)
+            select(func.count(TestCase.id)).where(*active_cases)
         ) or 0
         auto_count = self.db.scalar(
             select(func.count(TestCase.id)).where(
-                active_cases,
+                *active_cases,
                 TestCase.automation_level == "auto"
             )
         ) or 0
@@ -337,7 +352,7 @@ class CaseService:
                 TestCase,
                 TestCase.id == Task.case_id,
             ).where(
-                active_cases,
+                *active_cases,
                 *_terminal_task_conditions(),
                 Task.finished_at >= today_start,
                 Task.finished_at < tomorrow_start,
@@ -353,7 +368,7 @@ class CaseService:
                 TestCase,
                 TestCase.id == Task.case_id,
             ).where(
-                active_cases,
+                *active_cases,
                 *_terminal_task_conditions(),
             )
         ).one()
@@ -375,6 +390,7 @@ class CaseService:
     def list_cases(
         self,
         *,
+        business_id: str = DEFAULT_BUSINESS_ID,
         page: int = 1,
         page_size: int = 10,
         search: str | None = None,
@@ -396,7 +412,10 @@ class CaseService:
             )
             .outerjoin(statistics, statistics.c.case_id == TestCase.id)
         )
-        filters = [TestCase.deleted_at.is_(None)]
+        filters = [
+            TestCase.deleted_at.is_(None),
+            TestCase.business_id == business_id,
+        ]
         count_query = select(func.count(TestCase.id))
 
         if search:
@@ -475,8 +494,13 @@ class CaseService:
         ]
         return items, total
 
-    def update_case(self, case_id: str, payload: TestCaseUpdate) -> TestCase | None:
-        case = self.get_case(case_id)
+    def update_case(
+        self,
+        case_id: str,
+        payload: TestCaseUpdate,
+        business_id: str = DEFAULT_BUSINESS_ID,
+    ) -> TestCase | None:
+        case = self.get_case(case_id, business_id)
         if case is None:
             return None
         data = payload.model_dump(exclude_unset=True)
@@ -491,10 +515,14 @@ class CaseService:
             self.db.rollback()
             raise
 
-    def delete_case(self, case_id: str) -> bool:
+    def delete_case(
+        self,
+        case_id: str,
+        business_id: str = DEFAULT_BUSINESS_ID,
+    ) -> bool:
         from mua_platform.test_plans.models import TestPlan, TestPlanCase
 
-        case = self.get_case(case_id)
+        case = self.get_case(case_id, business_id)
         if case is None:
             return False
         if self.db.scalar(
@@ -525,9 +553,12 @@ class CaseService:
         self.db.commit()
         return True
 
-    def list_tags(self) -> list[str]:
+    def list_tags(self, business_id: str = DEFAULT_BUSINESS_ID) -> list[str]:
         rows = self.db.scalars(
-            select(TestCase.tags).where(TestCase.deleted_at.is_(None))
+            select(TestCase.tags).where(
+                TestCase.deleted_at.is_(None),
+                TestCase.business_id == business_id,
+            )
         ).all()
         tag_set: set[str] = set()
         for tags in rows:
@@ -535,16 +566,31 @@ class CaseService:
                 tag_set.update(t for t in tags if isinstance(t, str))
         return sorted(tag_set)
 
-    def list_modules(self) -> list[str]:
+    def list_modules(self, business_id: str = DEFAULT_BUSINESS_ID) -> list[str]:
         rows = self.db.scalars(
             select(TestCase.module)
             .where(
                 TestCase.deleted_at.is_(None),
+                TestCase.business_id == business_id,
                 TestCase.module.is_not(None),
             )
             .distinct()
         ).all()
         return sorted(r for r in rows if isinstance(r, str))
+
+    def list_creators(self, business_id: str = DEFAULT_BUSINESS_ID) -> list[str]:
+        rows = self.db.scalars(
+            select(TestCase.created_by)
+            .where(
+                TestCase.deleted_at.is_(None),
+                TestCase.business_id == business_id,
+                TestCase.created_by.is_not(None),
+                TestCase.created_by != "",
+            )
+            .distinct()
+            .order_by(TestCase.created_by)
+        ).all()
+        return [creator for creator in rows if isinstance(creator, str)]
 
     def _ensure_tag_colors(self, tags: list[str] | None) -> None:
         from mua_platform.test_plans.service import TagColorService

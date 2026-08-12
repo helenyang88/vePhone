@@ -18,6 +18,20 @@ export type UserListResponse = {
   items: User[];
 };
 
+export type BusinessSpace = {
+  id: string;
+  name: string;
+  description: string | null;
+  is_default: boolean;
+  task_concurrency_limit: number;
+  archived_at: string | null;
+  created_by: string;
+};
+
+export type BusinessSpaceListResponse = {
+  items: BusinessSpace[];
+};
+
 export type UserCreate = {
   username: string;
   password: string;
@@ -79,6 +93,11 @@ export type MobileUseSettings = {
   mcp_json: string | null;
   max_output_tokens: number | null;
   gps_info: string | null;
+  request_headers: {
+    configured: boolean;
+    names: string[];
+    items?: Array<{ name: string; value: string }>;
+  };
 };
 
 export type AgentRuntimeOptions = {
@@ -97,6 +116,7 @@ export type AgentRuntimeOptions = {
   mcp_json?: string | null;
   max_output_tokens?: number | null;
   gps_info?: string | null;
+  request_headers?: Record<string, string> | null;
 };
 
 export type SettingsResponse = {
@@ -129,7 +149,8 @@ export type RunnerSettingsUpdate = {
       | "screen_record"
       | "mcp_json"
       | "max_output_tokens"
-      | "gps_info",
+      | "gps_info"
+      | "request_headers",
       string | number | boolean | Record<string, unknown>
     >
   >;
@@ -368,6 +389,10 @@ export type TagListResponse = {
   items: string[];
 };
 
+export type CreatorListResponse = {
+  items: string[];
+};
+
 export type ModuleListResponse = {
   items: string[];
 };
@@ -411,6 +436,10 @@ export type TaskStats = {
   manual_review_fail_rate?: number;
 };
 
+export type TaskOperatorListResponse = {
+  items: string[];
+};
+
 export type TaskExecutionConfig = {
   source: "global" | "custom" | "legacy";
   product_id: string | null;
@@ -429,6 +458,11 @@ export type TaskExecutionConfig = {
   mcp_json: string | null;
   max_output_tokens: number | null;
   gps_info: string | null;
+  request_headers: {
+    configured: boolean;
+    names: string[];
+    items?: Array<{ name: string; value: string }>;
+  };
 };
 
 export type Task = {

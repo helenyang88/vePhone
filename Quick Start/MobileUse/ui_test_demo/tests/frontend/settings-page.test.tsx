@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { HttpResponse, http } from "msw";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -30,6 +30,7 @@ const configuredSettings: SettingsResponse = {
     mcp_json: null,
     max_output_tokens: null,
     gps_info: null,
+    request_headers: { configured: true, names: ["X-Env"] },
   },
 };
 
@@ -147,6 +148,12 @@ describe("设置页", () => {
     expect(screen.getByLabelText("Secret Access Key")).toHaveValue("");
     expect(screen.getByText("已配置：AKLT****WXYZ")).toBeVisible();
     expect(screen.getByText("已配置，留空则保留")).toBeVisible();
+    expect(screen.getByText("已配置：X-Env；留空则保留")).toBeVisible();
+    expect(screen.getByLabelText("请求 Header（JSON 对象）")).toHaveValue("");
+    expect(screen.getByLabelText("请求 Header（JSON 对象）")).toHaveAttribute(
+      "placeholder",
+      '{"X-Env":"test","X-Request-Source":"mua"}',
+    );
     expect(screen.queryByLabelText("Ark API Key")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Pod ID")).not.toBeInTheDocument();
     expect(screen.getByLabelText("Volcengine AccountId")).toHaveValue("2100000000000000000");
@@ -164,6 +171,9 @@ describe("设置页", () => {
     await user.type(screen.getByLabelText("推流 Token 有效期（秒）"), "900");
     await user.clear(screen.getByLabelText("默认任务超时 Timeout（秒）"));
     await user.type(screen.getByLabelText("默认任务超时 Timeout（秒）"), "456");
+    fireEvent.change(screen.getByLabelText("请求 Header（JSON 对象）"), {
+      target: { value: '{"X-Env":"staging"}' },
+    });
     await user.click(screen.getByRole("button", { name: "保存所有更改" }));
 
     await waitFor(() =>
@@ -174,6 +184,7 @@ describe("设置页", () => {
           account_id: "2100000000000000001",
           stream_token_ttl_seconds: 900,
           timeout_seconds: 456,
+          request_headers: { "X-Env": "staging" },
         },
       }),
     );
@@ -206,6 +217,7 @@ describe("设置页", () => {
         mcp_json: null,
         max_output_tokens: null,
         gps_info: null,
+        request_headers: { configured: false, names: [] },
       },
     });
 

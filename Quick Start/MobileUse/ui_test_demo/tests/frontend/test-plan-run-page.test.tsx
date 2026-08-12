@@ -244,7 +244,7 @@ it("removes run test type selection and exposes stable execution controls", asyn
   expect(STYLES).toMatch(
     /\.execution-config-hint\s*\{[^}]*font-size:\s*0\.76rem;[^}]*padding:\s*0\.55rem 0\.7rem;/s,
   );
-  const concurrency = screen.getByLabelText("并发数");
+  const concurrency = screen.getByLabelText("设备并发数");
   expect(concurrency).toHaveAttribute("name", "concurrency");
   expect(concurrency).toHaveAttribute("autocomplete", "off");
 
@@ -388,7 +388,7 @@ it("submits specified devices and shared custom execution fields", async () => {
 
   expect(await screen.findByText("2 个用例")).toBeVisible();
   await user.click(screen.getByRole("radio", { name: "指定设备" }));
-  fireEvent.change(screen.getByLabelText("并发数"), {
+  fireEvent.change(screen.getByLabelText("设备并发数"), {
     target: { value: "2" },
   });
   await user.click(await screen.findByLabelText("pod_1 pod_1"));
@@ -445,23 +445,23 @@ it("shows a friendly validation message when selected pods exceed concurrency", 
   renderApp("/test-plans/plan_1/run");
 
   await user.click(await screen.findByRole("radio", { name: "指定设备" }));
-  fireEvent.change(screen.getByLabelText("并发数"), {
+  fireEvent.change(screen.getByLabelText("设备并发数"), {
     target: { value: "2" },
   });
   await user.click(await screen.findByLabelText("pod_1 pod_1"));
   await user.click(screen.getByLabelText("回归设备 2 pod_2"));
   expect(screen.getAllByText("2 / 2").length).toBeGreaterThanOrEqual(1);
 
-  fireEvent.change(screen.getByLabelText("并发数"), {
+  fireEvent.change(screen.getByLabelText("设备并发数"), {
     target: { value: "1" },
   });
 
   expect(await screen.findByRole("alert")).toHaveTextContent(
-    "已选择 2 台设备，超过当前并发数 1。请减少设备数量，或提高并发数后再执行。",
+    "已选择 2 台设备，超过当前设备并发数 1。请减少设备数量，或提高设备并发数后再执行。",
   );
   await user.click(screen.getByRole("button", { name: "确认并开始执行" }));
   expect(screen.getByRole("alert")).toHaveTextContent(
-    "已选择 2 台设备，超过当前并发数 1。请减少设备数量，或提高并发数后再执行。",
+    "已选择 2 台设备，超过当前设备并发数 1。请减少设备数量，或提高设备并发数后再执行。",
   );
   expect(executionRequests).toBe(0);
 });
@@ -506,7 +506,7 @@ it("keeps the idempotency key for failed retries and changes it after config edi
   await waitFor(() => expect(bodies).toHaveLength(2));
   expect(bodies[1].idempotency_key).toBe(bodies[0].idempotency_key);
 
-  fireEvent.change(screen.getByLabelText("并发数"), {
+  fireEvent.change(screen.getByLabelText("设备并发数"), {
     target: { value: "2" },
   });
   await user.click(screen.getByRole("button", { name: "确认并开始执行" }));
@@ -566,7 +566,7 @@ it("locks fields and prevents duplicate submission while pending", async () => {
   await waitFor(() => expect(requests).toBe(1));
 
   expect(screen.queryByLabelText("测试类型")).not.toBeInTheDocument();
-  expect(screen.getByLabelText("并发数")).toBeDisabled();
+  expect(screen.getByLabelText("设备并发数")).toBeDisabled();
   expect(screen.getByRole("radio", { name: "使用全局配置" })).toBeDisabled();
   expect(screen.getByRole("button", { name: "正在创建执行…" })).toBeDisabled();
   fireEvent.click(screen.getByRole("button", { name: "正在创建执行…" }));
@@ -695,7 +695,7 @@ it("caps one-hundred-case plan concurrency at the backend limit", async () => {
   renderApp("/test-plans/plan_1/run");
 
   const concurrency = await screen.findByRole("spinbutton", {
-    name: "并发数",
+    name: "设备并发数",
   });
   expect(concurrency).toHaveAttribute("max", "20");
   expect(screen.getByText("最大不超过 20 个并发任务")).toBeVisible();

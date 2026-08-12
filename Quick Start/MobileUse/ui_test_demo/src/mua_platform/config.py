@@ -39,7 +39,7 @@ class Settings(BaseSettings):
     task_execution_timeout_seconds: int = Field(default=600, gt=0)
     cancel_confirm_timeout_seconds: int = Field(default=30, gt=0)
     device_wait_timeout_seconds: int = Field(default=300, gt=0)
-    task_worker_concurrency: int = Field(default=4, ge=1, le=32)
+    task_worker_concurrency: int = Field(default=16, ge=1, le=32)
     mobile_use_access_key_id: str | None = None
     mobile_use_secret_access_key: str | None = None
     mobile_use_product_id: str | None = None
@@ -62,6 +62,7 @@ class Settings(BaseSettings):
     mobile_use_mcp_json: str | None = None
     mobile_use_max_output_tokens: str | None = None
     mobile_use_gps_info: str | None = None
+    mobile_use_request_headers: str | None = None
 
     @model_validator(mode="after")
     def validate_app_secret_key(self) -> "Settings":
@@ -104,6 +105,7 @@ class Settings(BaseSettings):
             ("mcp_json", self.mobile_use_mcp_json),
             ("max_output_tokens", self.mobile_use_max_output_tokens),
             ("gps_info", self.mobile_use_gps_info),
+            ("request_headers", self.mobile_use_request_headers),
         ):
             if value:
                 defaults[f"runner.mobile_use.{field}"] = value

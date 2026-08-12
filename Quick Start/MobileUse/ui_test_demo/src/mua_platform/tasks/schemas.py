@@ -3,6 +3,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from mua_platform.settings.schemas import validate_request_headers
 from mua_platform.tasks.state_machine import ExecutionStatus, Verdict
 
 
@@ -28,6 +29,8 @@ class TaskStepResponse(BaseModel):
 
 class TaskExecutionConfig(BaseModel):
     source: Literal["global", "custom", "case_default", "legacy"]
+    business_id: str | None = None
+    business_name_snapshot: str | None = None
     thread_id: str | None = None
     product_id: str | None = None
     pod_id: str | None = None
@@ -45,6 +48,9 @@ class TaskExecutionConfig(BaseModel):
     mcp_json: str | None = None
     max_output_tokens: int | None = None
     gps_info: str | None = None
+    request_headers: dict[str, Any] = Field(
+        default_factory=lambda: {"configured": False, "names": []}
+    )
 
 
 class TaskResponse(BaseModel):
@@ -117,6 +123,23 @@ class TaskBatchCreateRequest(BaseModel):
     agent_config_mode: Literal["global", "custom", "case_default"] = "global"
     agent_options: dict[str, Any] | None = None
     idempotency_key: str = Field(min_length=1, max_length=255)
+
+    @field_validator("agent_options")
+    @classmethod
+    def validate_agent_options(
+        cls,
+        value: dict[str, Any] | None,
+    ) -> dict[str, Any] | None:
+        if value is None or "request_headers" not in value:
+            return value
+        try:
+            value = dict(value)
+            value["request_headers"] = validate_request_headers(
+                value.get("request_headers")
+            )
+        except ValueError as exc:
+            raise ValueError("request_headers_invalid") from exc
+        return value
 
     @model_validator(mode="after")
     def validate_batch_shape(self) -> "TaskBatchCreateRequest":

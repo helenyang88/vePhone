@@ -2,7 +2,7 @@ from datetime import UTC, datetime
 
 from fastapi import APIRouter, Query, Request, Response, status
 
-from mua_platform.api.deps import CsrfSession, CurrentUser, Database
+from mua_platform.api.deps import CsrfSession, CurrentBusiness, CurrentUser, Database
 from mua_platform.api.errors import api_error
 from mua_platform.cases.service import CaseService
 from mua_platform.settings.repository import SettingRepository
@@ -18,6 +18,7 @@ from mua_platform.test_plans.executions import (
 )
 from mua_platform.test_plans.reports import PlanReportService
 from mua_platform.test_plans.schemas import (
+    CreatorListResponse,
     PlanReportDetail,
     PlanReportListResponse,
     PlanReportStats,
@@ -77,19 +78,22 @@ def list_tags(
 def get_test_plan_stats(
     db: Database,
     _user: CurrentUser,
+    business: CurrentBusiness,
 ) -> TestPlanStatsResponse:
-    return TestPlanStatsResponse(**TestPlanService(db).stats())
+    return TestPlanStatsResponse(**TestPlanService(db).stats(business.id))
 
 
 @router.get("/test-plans", response_model=TestPlanListResponse)
 def list_test_plans(
     db: Database,
     _user: CurrentUser,
+    business: CurrentBusiness,
     page: int = Query(1, ge=1),
     page_size: int = Query(10, ge=1, le=100),
     search: str | None = Query(None),
     tag: str | None = Query(None),
     test_type: str | None = Query(None),
+    created_by: str | None = Query(None),
 ) -> TestPlanListResponse:
     service = TestPlanService(db)
     plans, total = service.list_paginated(
@@ -98,6 +102,8 @@ def list_test_plans(
         search,
         tag,
         test_type,
+        business.id,
+        created_by,
     )
     return TestPlanListResponse(
         items=service.responses(plans),
@@ -107,12 +113,22 @@ def list_test_plans(
     )
 
 
+@router.get("/test-plans/creators", response_model=CreatorListResponse)
+def list_test_plan_creators(
+    db: Database,
+    _user: CurrentUser,
+    business: CurrentBusiness,
+) -> CreatorListResponse:
+    return CreatorListResponse(items=TestPlanService(db).list_creators(business.id))
+
+
 @router.get("/test-plans/tags", response_model=TagListResponse)
 def list_test_plan_tags(
     db: Database,
     _user: CurrentUser,
+    business: CurrentBusiness,
 ) -> TagListResponse:
-    items = TestPlanService(db).list_plan_tags()
+    items = TestPlanService(db).list_plan_tags(business.id)
     return TagListResponse(
         items=items,
         total=len(items),
@@ -130,11 +146,16 @@ def create_test_plan(
     payload: TestPlanWrite,
     db: Database,
     user: CurrentUser,
+    business: CurrentBusiness,
     _csrf_session: CsrfSession,
 ) -> TestPlanResponse:
     service = TestPlanService(db)
     try:
-        plan = service.create(payload, created_by=user.username)
+        plan = service.create(
+            payload,
+            created_by=user.username,
+            business_id=business.id,
+        )
     except (
         TestPlanNameConflictError,
         TestPlanCasesNotFoundError,
@@ -152,9 +173,10 @@ def get_test_plan(
     plan_id: str,
     db: Database,
     _user: CurrentUser,
+    business: CurrentBusiness,
 ) -> TestPlanResponse:
     service = TestPlanService(db)
-    plan = service.get(plan_id)
+    plan = service.get(plan_id, business.id)
     if plan is None:
         raise _not_found()
     return service.response(plan)
@@ -169,11 +191,12 @@ def update_test_plan(
     payload: TestPlanWrite,
     db: Database,
     _user: CurrentUser,
+    business: CurrentBusiness,
     _csrf_session: CsrfSession,
 ) -> TestPlanResponse:
     service = TestPlanService(db)
     try:
-        plan = service.update(plan_id, payload)
+        plan = service.update(plan_id, payload, business.id)
     except (
         TestPlanNameConflictError,
         TestPlanCasesNotFoundError,
@@ -193,9 +216,10 @@ def delete_test_plan(
     plan_id: str,
     db: Database,
     _user: CurrentUser,
+    business: CurrentBusiness,
     _csrf_session: CsrfSession,
 ) -> Response:
-    if not TestPlanService(db).delete(plan_id, datetime.now(UTC)):
+    if not TestPlanService(db).delete(plan_id, datetime.now(UTC), business.id):
         raise _not_found()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
@@ -208,13 +232,14 @@ def list_test_plan_cases(
     plan_id: str,
     db: Database,
     _user: CurrentUser,
+    business: CurrentBusiness,
     page: int = Query(1, ge=1),
     page_size: int = Query(10, ge=1, le=100),
 ) -> TestPlanCaseListResponse:
     service = TestPlanService(db)
-    if not service.exists_active(plan_id):
+    if not service.exists_active(plan_id, business.id):
         raise _not_found()
-    cases, total = service.list_cases(plan_id, page, page_size)
+    cases, total = service.list_cases(plan_id, page, page_size, business.id)
     case_service = CaseService(db)
     return TestPlanCaseListResponse(
         items=case_service.case_responses(cases),
@@ -233,11 +258,12 @@ def remove_test_plan_case(
     case_id: str,
     db: Database,
     _user: CurrentUser,
+    business: CurrentBusiness,
     _csrf_session: CsrfSession,
 ) -> Response:
     service = TestPlanService(db)
     try:
-        removed = service.remove_case(plan_id, case_id)
+        removed = service.remove_case(plan_id, case_id, business.id)
     except TestPlanCaseNotFoundError as exc:
         raise api_error(
             404,
@@ -269,16 +295,18 @@ def list_test_plan_executions(
     plan_id: str,
     db: Database,
     _user: CurrentUser,
+    business: CurrentBusiness,
     page: int = Query(1, ge=1),
     page_size: int = Query(10),
 ) -> PlanReportListResponse:
     _require_report_page_size(page_size)
-    if not TestPlanService(db).exists_active(plan_id):
+    if not TestPlanService(db).exists_active(plan_id, business.id):
         raise _not_found()
     items, total = PlanReportService(db).list_plan_executions(
         plan_id,
         page=page,
         page_size=page_size,
+        business_id=business.id,
     )
     return PlanReportListResponse(
         items=items,
@@ -295,6 +323,7 @@ def list_test_plan_executions(
 def get_task_report_stats(
     db: Database,
     _user: CurrentUser,
+    business: CurrentBusiness,
     test_plan_id: str | None = Query(None),
     status_filter: ReportStatus | None = Query(None, alias="status"),
     created_after: datetime | None = Query(None),
@@ -303,6 +332,7 @@ def get_task_report_stats(
         test_plan_id=test_plan_id,
         status=status_filter,
         created_after=created_after,
+        business_id=business.id,
     )
 
 
@@ -313,6 +343,7 @@ def get_task_report_stats(
 def list_task_reports(
     db: Database,
     _user: CurrentUser,
+    business: CurrentBusiness,
     page: int = Query(1, ge=1),
     page_size: int = Query(10),
     test_plan_id: str | None = Query(None),
@@ -328,6 +359,7 @@ def list_task_reports(
         status=status_filter,
         created_after=created_after,
         search=search,
+        business_id=business.id,
     )
     return PlanReportListResponse(
         items=items,
@@ -345,6 +377,7 @@ def get_task_report(
     execution_id: str,
     db: Database,
     _user: CurrentUser,
+    business: CurrentBusiness,
     page: int = Query(1, ge=1),
     page_size: int = Query(10),
 ) -> PlanReportDetail:
@@ -353,6 +386,7 @@ def get_task_report(
         execution_id,
         page=page,
         page_size=page_size,
+        business_id=business.id,
     )
     if detail is None:
         raise api_error(
@@ -375,6 +409,7 @@ async def create_test_plan_execution(
     request: Request,
     db: Database,
     user: CurrentUser,
+    business: CurrentBusiness,
     _csrf_session: CsrfSession,
 ) -> PlanExecutionResponse:
     runner_config = SettingsService(
@@ -383,7 +418,7 @@ async def create_test_plan_execution(
             request.app.state.setting_cipher,
             request.app.state.settings.runner_setting_defaults(),
         )
-    ).get_runner_config()
+    ).get_runner_config(business.id)
     try:
         snapshot = runner_config.execution_snapshot()
     except RunnerExecutionSettingsError as exc:
@@ -394,6 +429,8 @@ async def create_test_plan_execution(
             "Runner execution settings are incomplete",
             {"missing_fields": exc.missing_fields},
         ) from exc
+    snapshot["business_id"] = business.id
+    snapshot["business_name_snapshot"] = business.name
 
     service = PlanExecutionService(db)
     try:
@@ -406,6 +443,7 @@ async def create_test_plan_execution(
             device_wait_timeout_seconds=(
                 request.app.state.settings.device_wait_timeout_seconds
             ),
+            business_id=business.id,
         )
     except PlanExecutionNotFoundError as exc:
         raise _not_found() from exc

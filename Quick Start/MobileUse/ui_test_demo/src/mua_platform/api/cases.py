@@ -3,7 +3,7 @@ from urllib.parse import unquote
 
 from fastapi import APIRouter, Query, Request, status
 
-from mua_platform.api.deps import CsrfSession, CurrentUser, Database
+from mua_platform.api.deps import CsrfSession, CurrentBusiness, CurrentUser, Database
 from mua_platform.api.errors import api_error
 from mua_platform.cases.models import CASE_TEMPLATE, TestCase
 from mua_platform.cases.schemas import (
@@ -18,6 +18,7 @@ from mua_platform.cases.schemas import (
     CaseImportPreviewResponse,
     CaseStatsResponse,
     CaseExecuteRequest,
+    CreatorListResponse,
     ModuleListResponse,
     TagListResponse,
     TestCaseCreate,
@@ -46,6 +47,7 @@ router = APIRouter(prefix="/api/v1/cases")
 def list_cases(
     db: Database,
     _user: CurrentUser,
+    business: CurrentBusiness,
     page: int = Query(1, ge=1),
     page_size: int = Query(10, ge=1, le=100),
     search: str | None = Query(None),
@@ -58,6 +60,7 @@ def list_cases(
     items, total = service.list_cases(
         page=page,
         page_size=page_size,
+        business_id=business.id,
         search=search,
         module=module,
         tags=tag,
@@ -77,11 +80,16 @@ def create_case(
     payload: TestCaseCreate,
     db: Database,
     user: CurrentUser,
+    business: CurrentBusiness,
     _csrf_session: CsrfSession,
 ) -> TestCaseResponse:
     service = CaseService(db)
     try:
-        case = service.create_case(payload, created_by=user.username)
+        case = service.create_case(
+            payload,
+            created_by=user.username,
+            business_id=business.id,
+        )
     except TagColorRegistryExhaustedError as exc:
         raise _tag_color_registry_exhausted() from exc
     return service.case_response(case)
@@ -183,11 +191,16 @@ def import_cases(
     payload: CaseImportConfirmRequest,
     db: Database,
     user: CurrentUser,
+    business: CurrentBusiness,
     _csrf_session: CsrfSession,
 ) -> CaseImportConfirmResponse:
     service = CaseService(db)
     try:
-        imported = service.import_cases(payload.items, created_by=user.username)
+        imported = service.import_cases(
+            payload.items,
+            created_by=user.username,
+            business_id=business.id,
+        )
     except TagColorRegistryExhaustedError as exc:
         raise _tag_color_registry_exhausted() from exc
     return CaseImportConfirmResponse(
@@ -201,6 +214,7 @@ def batch_delete_cases(
     payload: CaseBatchDeleteRequest,
     db: Database,
     _user: CurrentUser,
+    business: CurrentBusiness,
     _csrf_session: CsrfSession,
 ) -> CaseBatchDeleteResponse:
     service = CaseService(db)
@@ -211,7 +225,7 @@ def batch_delete_cases(
             continue
         seen.add(case_id)
         try:
-            deleted = service.delete_case(case_id)
+            deleted = service.delete_case(case_id, business.id)
         except ValueError as exc:
             code = str(exc)
             items.append(
@@ -248,18 +262,39 @@ def get_case_template() -> dict[str, str]:
 
 
 @router.get("/tags", response_model=TagListResponse)
-def list_tags(db: Database, _user: CurrentUser) -> TagListResponse:
-    return TagListResponse(items=CaseService(db).list_tags())
+def list_tags(
+    db: Database,
+    _user: CurrentUser,
+    business: CurrentBusiness,
+) -> TagListResponse:
+    return TagListResponse(items=CaseService(db).list_tags(business.id))
 
 
 @router.get("/modules", response_model=ModuleListResponse)
-def list_modules(db: Database, _user: CurrentUser) -> ModuleListResponse:
-    return ModuleListResponse(items=CaseService(db).list_modules())
+def list_modules(
+    db: Database,
+    _user: CurrentUser,
+    business: CurrentBusiness,
+) -> ModuleListResponse:
+    return ModuleListResponse(items=CaseService(db).list_modules(business.id))
+
+
+@router.get("/creators", response_model=CreatorListResponse)
+def list_creators(
+    db: Database,
+    _user: CurrentUser,
+    business: CurrentBusiness,
+) -> CreatorListResponse:
+    return CreatorListResponse(items=CaseService(db).list_creators(business.id))
 
 
 @router.get("/stats", response_model=CaseStatsResponse)
-def get_case_stats(db: Database, _user: CurrentUser) -> CaseStatsResponse:
-    return CaseStatsResponse(**CaseService(db).stats())
+def get_case_stats(
+    db: Database,
+    _user: CurrentUser,
+    business: CurrentBusiness,
+) -> CaseStatsResponse:
+    return CaseStatsResponse(**CaseService(db).stats(business.id))
 
 
 @router.get("/{case_id}", response_model=TestCaseResponse)
@@ -267,9 +302,10 @@ def get_case(
     case_id: str,
     db: Database,
     _user: CurrentUser,
+    business: CurrentBusiness,
 ) -> TestCaseResponse:
     service = CaseService(db)
-    return service.case_response(_get_case(db, case_id))
+    return service.case_response(_get_case(db, case_id, business.id))
 
 
 @router.get("/{case_id}/tasks")
@@ -277,14 +313,16 @@ def list_case_tasks(
     case_id: str,
     db: Database,
     _user: CurrentUser,
+    business: CurrentBusiness,
     page: int = Query(1, ge=1),
     page_size: int = Query(5, ge=1, le=100),
 ) -> dict:
-    _get_case(db, case_id)
+    _get_case(db, case_id, business.id)
     items, total = SQLiteTaskRepository(db).list_paginated(
         page=page,
         page_size=page_size,
         case_id=case_id,
+        business_id=business.id,
     )
     return {
         "items": [TaskResponse.model_validate(task) for task in items],
@@ -302,10 +340,11 @@ def list_case_test_plans(
     case_id: str,
     db: Database,
     _user: CurrentUser,
+    business: CurrentBusiness,
     page: int = Query(1, ge=1),
     page_size: int = Query(5, ge=1, le=20),
 ) -> CaseBoundTestPlanListResponse:
-    _get_case(db, case_id)
+    _get_case(db, case_id, business.id)
     items, total = TestPlanService(db).list_bound_plans_for_case(
         case_id,
         page,
@@ -328,11 +367,16 @@ def copy_case(
     case_id: str,
     db: Database,
     user: CurrentUser,
+    business: CurrentBusiness,
     _csrf_session: CsrfSession,
 ) -> TestCaseResponse:
     service = CaseService(db)
     try:
-        copied = service.copy_case(case_id, created_by=user.username)
+        copied = service.copy_case(
+            case_id,
+            created_by=user.username,
+            business_id=business.id,
+        )
     except TagColorRegistryExhaustedError as exc:
         raise _tag_color_registry_exhausted() from exc
     if copied is None:
@@ -346,11 +390,12 @@ def update_case(
     payload: TestCaseUpdate,
     db: Database,
     _user: CurrentUser,
+    business: CurrentBusiness,
     _csrf_session: CsrfSession,
 ) -> TestCaseResponse:
     service = CaseService(db)
     try:
-        case = service.update_case(case_id, payload)
+        case = service.update_case(case_id, payload, business.id)
     except TagColorRegistryExhaustedError as exc:
         raise _tag_color_registry_exhausted() from exc
     if case is None:
@@ -363,10 +408,11 @@ def delete_case(
     case_id: str,
     db: Database,
     _user: CurrentUser,
+    business: CurrentBusiness,
     _csrf_session: CsrfSession,
 ) -> None:
     try:
-        deleted = CaseService(db).delete_case(case_id)
+        deleted = CaseService(db).delete_case(case_id, business.id)
     except ValueError as exc:
         if str(exc) == "case_has_test_plans":
             raise api_error(
@@ -412,16 +458,17 @@ async def execute_case(
     request: Request,
     db: Database,
     user: CurrentUser,
+    business: CurrentBusiness,
     _csrf_session: CsrfSession,
 ):
-    case = _get_case(db, case_id)
+    case = _get_case(db, case_id, business.id)
     runner_config = SettingsService(
         SettingRepository(
             db,
             request.app.state.setting_cipher,
             request.app.state.settings.runner_setting_defaults(),
         )
-    ).get_runner_config()
+    ).get_runner_config(business.id)
     try:
         snapshot = runner_config.execution_snapshot()
     except RunnerExecutionSettingsError as exc:
@@ -447,6 +494,8 @@ async def execute_case(
         )
     if payload.agent_config_mode == "case_default" and case.default_agent_options:
         snapshot.update(case.default_agent_options)
+    snapshot["business_id"] = business.id
+    snapshot["business_name_snapshot"] = business.name
 
     pod_pool = (
         PodPoolService(
@@ -513,8 +562,8 @@ async def execute_case(
     return task
 
 
-def _get_case(db: Database, case_id: str) -> TestCase:
-    case = CaseService(db).get_case(case_id)
+def _get_case(db: Database, case_id: str, business_id: str) -> TestCase:
+    case = CaseService(db).get_case(case_id, business_id)
     if case is None:
         raise api_error(404, "case_not_found", "Test case not found")
     return case

@@ -16,6 +16,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from mua_platform.api.auth import router as auth_router
 from mua_platform.api.body_limit import RequestBodyLimitMiddleware
+from mua_platform.api.business import router as business_router
 from mua_platform.api.cases import router as cases_router
 from mua_platform.api.diagnostics import router as diagnostics_router
 from mua_platform.api.errors import error_detail
@@ -26,6 +27,7 @@ from mua_platform.api.tasks import testing_router
 from mua_platform.api.test_plans import router as test_plans_router
 from mua_platform.api.traces import router as traces_router
 from mua_platform.auth.throttle import LoginThrottle
+from mua_platform.business.models import BusinessSpace as _BusinessSpace  # noqa: F401
 from mua_platform.config import Settings, get_settings
 from mua_platform.db import (
     Base,
@@ -151,7 +153,7 @@ def create_app(
     def create_runner_for_task(task: Task, db) -> RunnerAdapter:
         config = SettingsService(
             SettingRepository(db, setting_cipher, resolved.runner_setting_defaults())
-        ).get_runner_config()
+        ).get_runner_config(task.business_id)
         if task.runner_type == "mobile_use":
             config = config.with_execution_snapshot(task.runner_config_snapshot)
         if runner_factory is None and task.runner_type == "mobile_use":
@@ -204,14 +206,22 @@ def create_app(
                 await service.run_task(task_id, "worker:default")
         await schedule_batches()
 
+    last_scheduled_business_id: str | None = None
+
     async def schedule_batches() -> list[str]:
+        nonlocal last_scheduled_business_id
         with session_factory() as db:
-            task_ids = BatchScheduler(db).schedule(SystemClock().now())
+            result = BatchScheduler(db).schedule(
+                SystemClock().now(),
+                global_limit=resolved.task_worker_concurrency,
+                start_after_business_id=last_scheduled_business_id,
+            )
+        last_scheduled_business_id = result.last_business_id
         worker = getattr(app.state, "task_worker", None)
         if worker is not None and worker.is_running:
-            for task_id in task_ids:
+            for task_id in result.task_ids:
                 await worker.enqueue(task_id)
-        return task_ids
+        return result.task_ids
 
     async def scheduler_loop() -> None:
         while True:
@@ -301,6 +311,7 @@ def create_app(
     app.state.stream_token_gateway = resolved_stream_token_gateway
     app.state.pod_clock = SystemClock()
     app.include_router(auth_router)
+    app.include_router(business_router)
     app.include_router(cases_router)
     app.include_router(diagnostics_router)
     app.include_router(pods_router)

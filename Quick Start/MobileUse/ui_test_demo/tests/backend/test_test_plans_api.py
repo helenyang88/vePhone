@@ -340,6 +340,50 @@ def test_plan_list_filters_by_test_type(authenticated_client):
     assert response.json()["items"][0]["test_type"] == "new_feature"
 
 
+def test_plan_list_filters_and_lists_creators(authenticated_client):
+    case_id = _create_case(authenticated_client, "创建人筛选公共用例")
+    admin_plan = _create_plan(
+        authenticated_client,
+        "管理员计划",
+        case_ids=[case_id],
+    )
+    alice_plan = _create_plan(
+        authenticated_client,
+        "Alice 计划",
+        case_ids=[case_id],
+    )
+    deleted_plan = _create_plan(
+        authenticated_client,
+        "已删除计划",
+        case_ids=[case_id],
+    )
+    with authenticated_client.app.state.session_factory() as db:
+        from mua_platform.test_plans.models import TestPlan
+
+        alice = db.get(TestPlan, alice_plan["id"])
+        deleted = db.get(TestPlan, deleted_plan["id"])
+        assert alice is not None
+        assert deleted is not None
+        alice.created_by = "alice"
+        deleted.created_by = "deleted-user"
+        deleted.deleted_at = datetime.now(UTC)
+        db.commit()
+
+    filtered = authenticated_client.get(
+        "/api/v1/test-plans",
+        params={"created_by": "alice"},
+    )
+    assert filtered.status_code == 200
+    assert filtered.json()["total"] == 1
+    assert filtered.json()["items"][0]["id"] == alice_plan["id"]
+    assert filtered.json()["items"][0]["created_by"] == "alice"
+
+    creators = authenticated_client.get("/api/v1/test-plans/creators")
+    assert creators.status_code == 200
+    assert creators.json() == {"items": ["admin", "alice"]}
+    assert admin_plan["created_by"] == "admin"
+
+
 def test_plan_list_treats_blank_test_type_as_regression(authenticated_client):
     case_id = _create_case(authenticated_client, "旧测试类型公共用例")
     matched = _create_plan(

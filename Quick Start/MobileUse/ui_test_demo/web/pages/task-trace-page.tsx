@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router";
 
 import { ApiError, api } from "../api/client";
+import { CloudPhoneStreamPanel } from "../components/cloud-phone-stream-panel";
 import type {
   RuntimeToolCallResult,
   TaskRuntimeResponse,
@@ -207,6 +208,7 @@ function ToolCallCard({ item, index }: { item: TimelineItem; index: number }) {
 export function TaskTracePage() {
   const { taskId } = useParams();
   const [threadSteps, setThreadSteps] = useState<TaskRuntimeResponse["thread_steps"]>([]);
+  const [showAllSteps, setShowAllSteps] = useState(false);
   const runtime = useQuery({
     enabled: Boolean(taskId),
     queryKey: ["task-runtime", taskId],
@@ -220,6 +222,7 @@ export function TaskTracePage() {
 
   useEffect(() => {
     setThreadSteps([]);
+    setShowAllSteps(false);
   }, [taskId]);
 
   useEffect(() => {
@@ -240,7 +243,16 @@ export function TaskTracePage() {
   );
 
   const stepCount = timeline.length;
+  const hasHiddenSteps = stepCount > 20;
+  const visibleTimeline = showAllSteps || !hasHiddenSteps
+    ? timeline
+    : timeline.slice(-20);
   const currentStepInfo = currentStep ? remoteStatusInfo(currentStep.status) : null;
+  const streamPodId = runtime.data?.thread_groups
+    .flatMap((group) => group.tasks)
+    .find((threadTask) => threadTask.pod_id)?.pod_id
+    ?? runtime.data?.execution_config?.pod_id
+    ?? null;
 
   if (runtime.isPending) return <div className="table-card"><p className="muted">正在加载执行轨迹...</p></div>;
   const friendlyError = emptyFriendlyError(runtime.error);
@@ -249,66 +261,94 @@ export function TaskTracePage() {
 
   return (
     <div className="runtime-dashboard trace-dashboard">
-      {isRunning && currentStep && (
-        <section className="table-card runtime-card trace-current-step-card">
-          <div className="section-heading">
-            <h2>当前步骤</h2>
-            <div className="section-actions">
-              <span className={`trace-step-status ${currentStepInfo?.tone ?? "neutral"}`}>
-                <span className="inline-pulse" />
-                {currentStepInfo?.label ?? "-"}
-              </span>
-              <span className="muted small">
-                <span className="inline-pulse" /> 自动刷新中
-              </span>
-            </div>
-          </div>
-          <div className="trace-current-info">
-            <div className="trace-current-step-id">
-              <span className="trace-tool-badge running">{currentStep.step_id ?? "等待调度"}</span>
-            </div>
-            <dl className="trace-current-meta">
-              <div><dt>RunID</dt><dd className="mono">{currentStep.run_id ?? "-"}</dd></div>
-              <div><dt>ThreadID</dt><dd className="mono">{currentStep.thread_id ?? "-"}</dd></div>
-            </dl>
-          </div>
-          {currentStep.results.length > 0 && (
-            <div className="trace-current-tool">
-              <span className="muted small">正在执行：</span>
-              <strong>{currentStep.results[currentStep.results.length - 1]?.Action ?? "-"}</strong>
-            </div>
-          )}
-        </section>
-      )}
-
-      {!isRunning && (
-      <section className="table-card runtime-card">
-        <div className="section-heading">
-          <h2>执行步骤详情</h2>
-          <div className="section-actions">
-            <span className="muted small">共 {stepCount} 步</span>
-          </div>
-        </div>
-
-        {timeline.length === 0 ? (
-          <p className="muted">暂无步骤详情。</p>
-        ) : (
-          <div className="trace-timeline">
-            {timeline.map((item, idx) => (
-              <ToolCallCard key={item.key} item={item} index={idx} />
-            ))}
-            {isRunning && timeline.length > 0 && (
-              <div className="trace-timeline-item pending">
-                <div className="trace-timeline-dot"><span className="pending-dot" /></div>
-                <div className="trace-timeline-content">
-                  <span className="muted small">等待下一步操作...</span>
+      <div className="trace-runtime-layout">
+        <div className="trace-runtime-main">
+          {isRunning && currentStep ? (
+            <section className="table-card runtime-card trace-current-step-card">
+              <div className="section-heading">
+                <h2>当前步骤</h2>
+                <div className="section-actions">
+                  <span className={`trace-step-status ${currentStepInfo?.tone ?? "neutral"}`}>
+                    <span className="inline-pulse" />
+                    {currentStepInfo?.label ?? "-"}
+                  </span>
+                  <span className="muted small">
+                    <span className="inline-pulse" /> 自动刷新中
+                  </span>
                 </div>
               </div>
+              <div className="trace-current-info">
+                <div className="trace-current-step-id">
+                  <span className="trace-tool-badge running">{currentStep.step_id ?? "等待调度"}</span>
+                </div>
+                <dl className="trace-current-meta">
+                  <div><dt>RunID</dt><dd className="mono">{currentStep.run_id ?? "-"}</dd></div>
+                  <div><dt>ThreadID</dt><dd className="mono">{currentStep.thread_id ?? "-"}</dd></div>
+                </dl>
+              </div>
+              {currentStep.results.length > 0 && (
+                <div className="trace-current-tool">
+                  <span className="muted small">正在执行：</span>
+                  <strong>{currentStep.results[currentStep.results.length - 1]?.Action ?? "-"}</strong>
+                </div>
+              )}
+            </section>
+          ) : (
+            <section className="table-card runtime-card">
+              <div className="section-heading">
+                <h2>执行步骤详情</h2>
+                <div className="section-actions">
+                  <span className="muted small">共 {stepCount} 步</span>
+                </div>
+              </div>
+
+              {timeline.length === 0 ? (
+                <p className="muted">暂无步骤详情。</p>
+              ) : (
+                <>
+                  <div className="trace-timeline">
+                    {visibleTimeline.map((item, idx) => (
+                      <ToolCallCard key={item.key} item={item} index={idx} />
+                    ))}
+                    {isRunning && visibleTimeline.length > 0 && (
+                      <div className="trace-timeline-item pending">
+                        <div className="trace-timeline-dot"><span className="pending-dot" /></div>
+                        <div className="trace-timeline-content">
+                          <span className="muted small">等待下一步操作...</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  {hasHiddenSteps && (
+                    <div className="trace-step-toggle-row">
+                      <button
+                        type="button"
+                        className="secondary-button compact"
+                        onClick={() => setShowAllSteps((value) => !value)}
+                      >
+                        {showAllSteps ? "收起到最近 20 步" : `展开全部 ${stepCount} 步`}
+                      </button>
+                    </div>
+                  )}
+                </>
+              )}
+            </section>
+          )}
+        </div>
+
+        <aside className="trace-runtime-stream">
+          <div className="table-card runtime-card">
+            <div className="section-heading">
+              <h2>拉流画面</h2>
+            </div>
+            {streamPodId ? (
+              <CloudPhoneStreamPanel podId={streamPodId} />
+            ) : (
+              <p className="muted">当前任务未绑定云手机，无法打开实时画面。</p>
             )}
           </div>
-        )}
-      </section>
-      )}
+        </aside>
+      </div>
     </div>
   );
 }

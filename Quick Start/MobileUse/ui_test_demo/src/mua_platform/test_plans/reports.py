@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 from sqlalchemy import Select, String, case, cast, func, select
 from sqlalchemy.orm import Session
 
+from mua_platform.business.models import DEFAULT_BUSINESS_ID
 from mua_platform.cases.models import TestCase
 from mua_platform.tasks.execution_config import public_execution_config
 from mua_platform.tasks.models import Task, TaskBatch
@@ -69,6 +70,7 @@ class PlanReportService:
         status: ReportStatus | None,
         created_after: datetime | None,
         search: str | None = None,
+        business_id: str = DEFAULT_BUSINESS_ID,
     ) -> tuple[list[PlanReportSummary], int]:
         aggregate = _task_aggregate()
         status_column = _report_status_expression(aggregate).label(
@@ -80,6 +82,7 @@ class PlanReportService:
             status=status,
             created_after=created_after,
             search=search,
+            business_id=business_id,
         )
         total = self.db.scalar(
             select(func.count(PlanExecution.id))
@@ -115,6 +118,7 @@ class PlanReportService:
         test_plan_id: str | None,
         status: ReportStatus | None,
         created_after: datetime | None,
+        business_id: str = DEFAULT_BUSINESS_ID,
     ) -> PlanReportStats:
         aggregate = _task_aggregate()
         status_column = _report_status_expression(aggregate).label(
@@ -125,6 +129,7 @@ class PlanReportService:
             test_plan_id=test_plan_id,
             status=status,
             created_after=created_after,
+            business_id=business_id,
         )
         snapshot_total = func.json_array_length(
             PlanExecution.case_ids_snapshot
@@ -175,6 +180,7 @@ class PlanReportService:
         *,
         page: int,
         page_size: int,
+        business_id: str = DEFAULT_BUSINESS_ID,
     ) -> PlanReportDetail | None:
         aggregate = _task_aggregate()
         status_column = _report_status_expression(aggregate).label(
@@ -182,7 +188,8 @@ class PlanReportService:
         )
         row = self.db.execute(
             _summary_query(aggregate, status_column).where(
-                PlanExecution.id == execution_id
+                PlanExecution.id == execution_id,
+                PlanExecution.business_id == business_id,
             )
         ).one_or_none()
         if row is None:
@@ -268,6 +275,7 @@ class PlanReportService:
         *,
         page: int,
         page_size: int,
+        business_id: str = DEFAULT_BUSINESS_ID,
     ) -> tuple[list[PlanReportSummary], int]:
         return self.list_paginated(
             page=page,
@@ -275,6 +283,7 @@ class PlanReportService:
             test_plan_id=plan_id,
             status=None,
             created_after=None,
+            business_id=business_id,
         )
 
 
@@ -365,8 +374,9 @@ def _filters(
     status: ReportStatus | None,
     created_after: datetime | None,
     search: str | None = None,
+    business_id: str = DEFAULT_BUSINESS_ID,
 ) -> list:
-    filters = []
+    filters = [PlanExecution.business_id == business_id]
     if test_plan_id is not None:
         filters.append(PlanExecution.test_plan_id == test_plan_id)
     if status is not None:

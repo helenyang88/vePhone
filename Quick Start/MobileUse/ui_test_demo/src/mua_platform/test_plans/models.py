@@ -32,6 +32,12 @@ class TestPlan(Base):
     )
 
     id: Mapped[str] = mapped_column(String(40), primary_key=True)
+    business_id: Mapped[str] = mapped_column(
+        String(40),
+        default="biz_default",
+        server_default="biz_default",
+        index=True,
+    )
     name: Mapped[str] = mapped_column(String(100))
     name_key: Mapped[str] = mapped_column(String(100), index=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -80,6 +86,12 @@ class PlanExecution(Base):
     __tablename__ = "plan_executions"
 
     id: Mapped[str] = mapped_column(String(40), primary_key=True)
+    business_id: Mapped[str] = mapped_column(
+        String(40),
+        default="biz_default",
+        server_default="biz_default",
+        index=True,
+    )
     test_plan_id: Mapped[str | None] = mapped_column(
         ForeignKey("test_plans.id"),
         nullable=True,

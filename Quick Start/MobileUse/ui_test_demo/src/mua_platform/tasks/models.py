@@ -25,6 +25,12 @@ class TaskBatch(Base):
     __tablename__ = "task_batches"
 
     id: Mapped[str] = mapped_column(String(40), primary_key=True)
+    business_id: Mapped[str] = mapped_column(
+        String(40),
+        default="biz_default",
+        server_default="biz_default",
+        index=True,
+    )
     name: Mapped[str] = mapped_column(String(200))
     test_type: Mapped[str] = mapped_column(String(32))
     selection_mode: Mapped[str] = mapped_column(String(32))
@@ -85,6 +91,12 @@ class Task(Base):
     __tablename__ = "tasks"
 
     id: Mapped[str] = mapped_column(String(40), primary_key=True)
+    business_id: Mapped[str] = mapped_column(
+        String(40),
+        default="biz_default",
+        server_default="biz_default",
+        index=True,
+    )
     case_id: Mapped[str] = mapped_column(ForeignKey("test_cases.id"), index=True)
     batch_id: Mapped[str | None] = mapped_column(
         ForeignKey("task_batches.id"),

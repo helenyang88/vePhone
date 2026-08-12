@@ -64,6 +64,12 @@ class TestCase(Base):
     __tablename__ = "test_cases"
 
     id: Mapped[str] = mapped_column(String(40), primary_key=True)
+    business_id: Mapped[str] = mapped_column(
+        String(40),
+        default="biz_default",
+        server_default="biz_default",
+        index=True,
+    )
     title: Mapped[str] = mapped_column(String(200))
     module: Mapped[str | None] = mapped_column(String(100), nullable=True)
     content_markdown: Mapped[str] = mapped_column(Text, default=CASE_TEMPLATE)

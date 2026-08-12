@@ -35,7 +35,8 @@ type MobileField =
   | "screen_record"
   | "mcp_json"
   | "max_output_tokens"
-  | "gps_info";
+  | "gps_info"
+  | "request_headers";
 
 type MobileValues = Record<MobileField, string>;
 type FieldErrors = Partial<Record<MobileField, string>>;
@@ -61,6 +62,7 @@ const EMPTY_VALUES: MobileValues = {
   mcp_json: "",
   max_output_tokens: "",
   gps_info: "",
+  request_headers: "",
 };
 
 const FIELD_LABELS: Record<MobileField, string> = {
@@ -84,7 +86,20 @@ const FIELD_LABELS: Record<MobileField, string> = {
   mcp_json: "McpJson",
   max_output_tokens: "MaxOutputTokens",
   gps_info: "GpsInfo",
+  request_headers: "请求 Header（JSON 对象）",
 };
+
+const REQUEST_HEADERS_PLACEHOLDER = '{"X-Env":"test","X-Request-Source":"mua"}';
+const RESERVED_REQUEST_HEADERS = new Set([
+  "accept",
+  "authorization",
+  "content-length",
+  "content-type",
+  "host",
+  "user-agent",
+  "x-content-sha256",
+  "x-date",
+]);
 
 const REQUIRED_FIELDS: MobileField[] = [
   "access_key_id",
@@ -208,6 +223,7 @@ export function SettingsPage() {
         ? String(settings.data.mobile_use.max_output_tokens)
         : "",
       gps_info: settings.data.mobile_use.gps_info ?? "",
+      request_headers: "",
     });
     setDirtyFields(new Set());
   }, [settings.data]);
@@ -299,6 +315,9 @@ export function SettingsPage() {
     if (!settings.data) return false;
     if (field === "access_key_id") return settings.data.mobile_use.access_key_id.configured;
     if (field === "secret_access_key") return settings.data.mobile_use.secret_access_key.configured;
+    if (field === "request_headers") {
+      return Boolean(settings.data.mobile_use.request_headers?.configured);
+    }
     return values[field].trim().length > 0;
   }
 
@@ -322,7 +341,12 @@ export function SettingsPage() {
       if (parsed === undefined) continue;
       if (
         parsed === false
-        && (field === "callback_info" || field === "output_schema" || field === "mcp_json")
+        && (
+          field === "callback_info"
+          || field === "output_schema"
+          || field === "mcp_json"
+          || field === "request_headers"
+        )
       ) return;
       changedValues[field] = parsed as never;
     }
@@ -347,8 +371,11 @@ export function SettingsPage() {
         ? settings.data?.mobile_use.access_key_id.configured
         : field === "secret_access_key"
           ? settings.data?.mobile_use.secret_access_key.configured
+          : field === "request_headers"
+            ? settings.data?.mobile_use.request_headers?.configured
           : false;
     const accessKeyHint = settings.data?.mobile_use.access_key_id.hint;
+    const requestHeaderNames = settings.data?.mobile_use.request_headers?.names ?? [];
 
     return (
       <div className="settings-field">
@@ -357,19 +384,26 @@ export function SettingsPage() {
           id={`field-${field}`}
           aria-label={FIELD_LABELS[field]}
           aria-describedby={
-            fieldErrors[field] ? errorId : secret && configured ? hintId : undefined
+            fieldErrors[field]
+              ? errorId
+              : configured && (secret || field === "request_headers")
+                ? hintId
+                : undefined
           }
           aria-invalid={Boolean(fieldErrors[field])}
           autoComplete={secret ? "new-password" : "off"}
+          placeholder={field === "request_headers" ? REQUEST_HEADERS_PLACEHOLDER : undefined}
           type={secret ? "password" : "text"}
           value={values[field]}
           onChange={(event) => updateValue(field, event.target.value)}
         />
-        {secret && configured && (
+        {configured && (secret || field === "request_headers") && (
           <p className="field-hint" id={hintId}>
             {field === "access_key_id" && accessKeyHint
               ? `已配置：${accessKeyHint}`
-              : "已配置，留空则保留"}
+              : field === "request_headers"
+                ? `已配置：${requestHeaderNames.join("、")}；留空则保留`
+                : "已配置，留空则保留"}
           </p>
         )}
         {fieldErrors[field] && (
@@ -409,6 +443,14 @@ export function SettingsPage() {
         return false;
       }
     }
+    if (field === "request_headers") {
+      const parsed = parseRequestHeaders(trimmed);
+      if (typeof parsed === "string") {
+        setLocalError(parsed);
+        return false;
+      }
+      return parsed;
+    }
     if (field === "output_schema" || field === "mcp_json") {
       try {
         JSON.parse(trimmed);
@@ -418,6 +460,26 @@ export function SettingsPage() {
       }
     }
     return trimmed;
+  }
+
+  function parseRequestHeaders(value: string): Record<string, string> | string {
+    try {
+      const parsed = JSON.parse(value);
+      if (!parsed || Array.isArray(parsed) || typeof parsed !== "object") {
+        return "请求 Header 必须是 JSON 对象。";
+      }
+      for (const [name, headerValue] of Object.entries(parsed)) {
+        if (RESERVED_REQUEST_HEADERS.has(name.trim().toLowerCase())) {
+          return `请求 Header 包含不允许覆盖的保留字段：${name}`;
+        }
+        if (typeof headerValue !== "string") {
+          return "请求 Header 的值必须是字符串。";
+        }
+      }
+      return parsed as Record<string, string>;
+    } catch {
+      return "请求 Header 不是合法 JSON。";
+    }
   }
 
   if (me.isPending || (isAdmin && settings.isPending)) {
@@ -620,6 +682,7 @@ export function SettingsPage() {
                 {renderInput("output_schema")}
                 {renderInput("mcp_json")}
                 {renderInput("gps_info")}
+                {renderInput("request_headers")}
               </div>
             </section>
           )}

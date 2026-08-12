@@ -94,12 +94,19 @@ export function RuntimeConfigSnapshot({
   config: TaskExecutionConfig;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const [headersOpen, setHeadersOpen] = useState(false);
   const drawerId = useId();
+  const headerDialogTitleId = useId();
   const sourceLabel = config.source === "custom"
     ? "自定义配置"
     : config.source === "global"
       ? "全局配置"
       : "历史配置";
+  const requestHeaderNames = config.request_headers?.names ?? [];
+  const requestHeaderItems = config.request_headers?.items?.length
+    ? config.request_headers.items
+    : requestHeaderNames.map((name) => ({ name, value: "-" }));
+  const requestHeadersConfigured = Boolean(config.request_headers?.configured);
   const advanced = [
     ["SystemPrompt", config.system_prompt],
     ["McpJson", config.mcp_json],
@@ -211,6 +218,25 @@ export function RuntimeConfigSnapshot({
             label="MCP 服务"
             value={`${mcpServiceCount(config.mcp_json)} 项`}
           />
+          <div className="runtime-config-row">
+            <span>请求 Header</span>
+            <button
+              type="button"
+              aria-label={
+                requestHeadersConfigured ? "查看请求 Header" : "请求 Header 未设置"
+              }
+              className={`runtime-config-value-button${
+                requestHeadersConfigured ? " configured" : ""
+              }`}
+              disabled={!requestHeadersConfigured}
+              onClick={() => setHeadersOpen(true)}
+            >
+              {requestHeadersConfigured && (
+                <span className="runtime-config-dot" aria-hidden="true" />
+              )}
+              {requestHeadersConfigured ? "已设置" : "未设置"}
+            </button>
+          </div>
           <ConfigRow
             label="输出结构"
             value={configured(config.output_schema) ? "已设置" : "未设置"}
@@ -251,6 +277,44 @@ export function RuntimeConfigSnapshot({
           </svg>
         </button>
       </div>
+
+      {headersOpen && requestHeadersConfigured && (
+        <div
+          className="runtime-config-dialog-backdrop"
+          onClick={() => setHeadersOpen(false)}
+        >
+          <div
+            aria-labelledby={headerDialogTitleId}
+            aria-modal="true"
+            className="runtime-config-dialog"
+            role="dialog"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="runtime-config-dialog-header">
+              <div>
+                <span>已脱敏</span>
+                <h3 id={headerDialogTitleId}>请求 Header</h3>
+              </div>
+              <button
+                type="button"
+                aria-label="关闭请求 Header 弹窗"
+                onClick={() => setHeadersOpen(false)}
+              >
+                ×
+              </button>
+            </div>
+            <p>Header 值已按敏感字段规则脱敏。</p>
+            <ul>
+              {requestHeaderItems.map((item) => (
+                <li key={item.name}>
+                  <code>{item.name}</code>
+                  <span>{item.value}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      )}
 
       {expanded && (
         <div

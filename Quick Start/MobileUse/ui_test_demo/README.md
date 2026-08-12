@@ -74,7 +74,7 @@ Common variables:
 | `TASK_EXECUTION_TIMEOUT_SECONDS` | `600` | Maximum runtime for one task, in seconds. Timed-out tasks are treated as failed/interrupted. |
 | `CANCEL_CONFIRM_TIMEOUT_SECONDS` | `30` | How long the app waits for remote cancellation confirmation, in seconds. |
 | `DEVICE_WAIT_TIMEOUT_SECONDS` | `300` | How long queued tasks wait when selected devices are offline, missing, or unavailable, in seconds. |
-| `TASK_WORKER_CONCURRENCY` | `4` | Global backend Worker concurrency limit. This is a system-wide cap, not the same as the per-test-plan concurrency value in the UI. |
+| `TASK_WORKER_CONCURRENCY` | `16` | Global backend Worker concurrency limit. This system-wide cap is separate from business-space and run-level device concurrency limits. |
 
 To run on real devices, configure the runner from the Settings page or through
 the `MOBILE_USE_*` variables shown in `.env.example`.
@@ -140,7 +140,7 @@ APP_ENV=production
 APP_DATA_DIR=./data
 APP_SECRET_KEY=replace-with-a-stable-random-string-at-least-32-bytes
 APP_BASE_URL=http://127.0.0.1:8000
-TASK_WORKER_CONCURRENCY=4
+TASK_WORKER_CONCURRENCY=16
 ```
 
 What these five settings do:
@@ -151,14 +151,14 @@ What these five settings do:
 | `APP_DATA_DIR` | `./data` | Where app data is stored. Back up this directory for migration, upgrade, and troubleshooting. |
 | `APP_SECRET_KEY` | A stable random string with at least 32 bytes | Encrypts saved cloud credentials and other sensitive settings. Keep it unchanged after deployment. |
 | `APP_BASE_URL` | `http://127.0.0.1:8000` or the real access URL | Tells the app its own access address. Update it when host, port, domain, or reverse proxy changes. |
-| `TASK_WORKER_CONCURRENCY` | `4` | Controls how many tasks the backend can process at once. Lower it for fewer devices; raise it only when devices and machine resources are sufficient. Restart the service after changing it in `.env`. |
+| `TASK_WORKER_CONCURRENCY` | `16` | Controls how many tasks the backend can process at once. Restart the service after changing it in `.env`. |
 
 Concurrency notes:
 
 - `TASK_WORKER_CONCURRENCY` is the global backend service limit.
-- The concurrency value entered on a test plan or batch page is the limit for that run.
-- Actual parallel execution is usually limited by the smallest of `TASK_WORKER_CONCURRENCY`, the run-level concurrency value, and the number of available devices.
-- For example: if `TASK_WORKER_CONCURRENCY=4` and a test plan uses concurrency `2`, at most `2` tasks run at once. If the test plan uses concurrency `10`, the backend still limits it to `4`. If only one device is available, usually only one real-device task can run.
+- Each business space defaults to `4` concurrent tasks and can be configured from `1` to `8`.
+- The device concurrency value entered on a test plan or batch page limits that run.
+- New tasks are limited by the smallest remaining global, business, and batch capacity, and by the devices currently available to that business.
 
 4. Start the service with `make dev`.
 5. Open `http://127.0.0.1:8000`, create the first admin account, and configure

@@ -3,7 +3,12 @@ from typing import Any
 
 from mua_platform.settings.audit import add_runner_settings_audit
 from mua_platform.settings.repository import SettingRepository
-from mua_platform.settings.schemas import RunnerConfig, RunnerSettingsUpdate
+from mua_platform.settings.schemas import (
+    RunnerConfig,
+    RunnerSettingsUpdate,
+    validate_request_headers,
+)
+from mua_platform.business.models import DEFAULT_BUSINESS_ID
 
 _FIELDS = (
     "access_key_id",
@@ -28,6 +33,7 @@ _FIELDS = (
     "mcp_json",
     "max_output_tokens",
     "gps_info",
+    "request_headers",
 )
 _REQUIRED_MOBILE_USE_FIELDS = (
     "access_key_id",
@@ -47,10 +53,16 @@ class SettingsService:
     def __init__(self, repository: SettingRepository) -> None:
         self.repository = repository
 
-    def get_runner_config(self) -> RunnerConfig:
-        mode = self.repository.get("runner.mode") or "mobile_use"
+    def get_runner_config(self, business_id: str | None = None) -> RunnerConfig:
+        mode = (
+            self._get_setting("runner.mode", business_id)
+            or "mobile_use"
+        )
         values = {
-            field: _deserialize_field(field, self.repository.get(f"runner.mobile_use.{field}"))
+            field: _deserialize_field(
+                field,
+                self._get_setting(f"runner.mobile_use.{field}", business_id),
+            )
             for field in _FIELDS
         }
         return RunnerConfig(
@@ -58,8 +70,8 @@ class SettingsService:
             **{field: value for field, value in values.items() if value is not None},
         )
 
-    def get_public_settings(self) -> dict[str, Any]:
-        config = self.get_runner_config()
+    def get_public_settings(self, business_id: str | None = None) -> dict[str, Any]:
+        config = self.get_runner_config(business_id)
         return {
             "mode": config.mode,
             "mobile_use": {
@@ -85,6 +97,7 @@ class SettingsService:
                 "mcp_json": config.mcp_json,
                 "max_output_tokens": config.max_output_tokens,
                 "gps_info": config.gps_info,
+                "request_headers": _header_state(config.request_headers),
             },
         }
 
@@ -92,10 +105,11 @@ class SettingsService:
         self,
         payload: RunnerSettingsUpdate,
         actor_user_id: int,
+        business_id: str | None = None,
     ) -> dict[str, Any]:
-        self.validate_runner(payload)
+        self.validate_runner(payload, business_id)
         changed_values = {
-            f"runner.mobile_use.{field}": _serialize_field(
+            self._setting_key(f"runner.mobile_use.{field}", business_id): _serialize_field(
                 field,
                 getattr(payload.mobile_use, field),
             )
@@ -107,23 +121,29 @@ class SettingsService:
         }
         self.repository.set_many(
             {
-                "runner.mode": payload.mode,
+                self._setting_key("runner.mode", business_id): payload.mode,
                 **changed_values,
             }
         )
-        changed_fields = [
-            key.removeprefix("runner.mobile_use.") for key in changed_values
-        ]
+        changed_fields = sorted(
+            payload.mobile_use.model_fields_set
+            if payload.mobile_use is not None
+            else ()
+        )
         add_runner_settings_audit(
             self.repository.db,
             actor_user_id=actor_user_id,
             mode=payload.mode,
             changed_fields=changed_fields,
         )
-        return self.get_public_settings()
+        return self.get_public_settings(business_id)
 
-    def validate_runner(self, payload: RunnerSettingsUpdate) -> RunnerConfig:
-        config = self.get_runner_config()
+    def validate_runner(
+        self,
+        payload: RunnerSettingsUpdate,
+        business_id: str | None = None,
+    ) -> RunnerConfig:
+        config = self.get_runner_config(business_id)
         merged = config.model_dump(exclude={"mode"})
 
         if payload.mobile_use is not None:
@@ -135,7 +155,26 @@ class SettingsService:
                         {"field": field},
                     )
                 normalized = value.strip() if isinstance(value, str) else value
+                if field == "request_headers":
+                    try:
+                        normalized = validate_request_headers(normalized)
+                    except ValueError as exc:
+                        raise RunnerSettingsValidationError(
+                            "runner_setting_value_invalid",
+                            {"field": field},
+                        ) from exc
                 merged[field] = normalized
+
+        if (
+            business_id is not None
+            and payload.mobile_use is not None
+            and "product_id" in payload.mobile_use.model_fields_set
+            and not self.product_id_available(merged["product_id"], business_id)
+        ):
+            raise RunnerSettingsValidationError(
+                "runner_product_id_conflict",
+                {"field": "product_id"},
+            )
 
         if payload.mode == "mobile_use":
             missing_fields = [
@@ -149,12 +188,57 @@ class SettingsService:
 
         return RunnerConfig(mode=payload.mode, **merged)
 
+    def product_id_available(
+        self,
+        product_id: str,
+        business_id: str | None = None,
+    ) -> bool:
+        normalized = product_id.strip()
+        if not normalized:
+            return False
+
+        legacy_product_id = self.repository.get("runner.mobile_use.product_id")
+        if (
+            legacy_product_id == normalized
+            and business_id not in {None, DEFAULT_BUSINESS_ID}
+        ):
+            return False
+
+        for key, value in self.repository.list_decrypted().items():
+            owner = _product_id_owner(key)
+            if owner is None or owner == business_id:
+                continue
+            if value.strip() == normalized:
+                return False
+        return True
+
+    def _setting_key(self, key: str, business_id: str | None) -> str:
+        if business_id is None:
+            return key
+        return f"business.{business_id}.{key}"
+
+    def _get_setting(self, key: str, business_id: str | None) -> str | None:
+        if business_id is None:
+            return self.repository.get(key)
+        value = self.repository.get(self._setting_key(key, business_id))
+        if value is not None:
+            return value
+        if business_id == DEFAULT_BUSINESS_ID:
+            return self.repository.get(key)
+        return None
+
 
 def _masked_access_key(value: str | None) -> dict[str, bool | str]:
     if value is None:
         return {"configured": False}
     hint = f"{value[:4]}****{value[-4:]}" if len(value) >= 9 else "configured"
     return {"configured": True, "hint": hint}
+
+
+def _header_state(value: dict[str, str] | None) -> dict[str, bool | list[str]]:
+    if not value:
+        return {"configured": False, "names": []}
+    return {"configured": True, "names": list(value)}
 
 
 def _deserialize_field(field: str, value: str | None) -> Any:
@@ -170,7 +254,7 @@ def _deserialize_field(field: str, value: str | None) -> Any:
         "stream_token_ttl_seconds",
     }:
         return int(value)
-    if field == "callback_info":
+    if field in {"callback_info", "request_headers"}:
         return json.loads(value)
     return value
 
@@ -178,8 +262,18 @@ def _deserialize_field(field: str, value: str | None) -> Any:
 def _serialize_field(field: str, value: Any) -> str:
     if isinstance(value, str):
         return value.strip()
-    if field == "callback_info":
+    if field in {"callback_info", "request_headers"}:
         return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
     if isinstance(value, bool):
         return "true" if value else "false"
     return str(value)
+
+
+def _product_id_owner(key: str) -> str | None:
+    if key == "runner.mobile_use.product_id":
+        return DEFAULT_BUSINESS_ID
+    prefix = "business."
+    suffix = ".runner.mobile_use.product_id"
+    if key.startswith(prefix) and key.endswith(suffix):
+        return key[len(prefix) : -len(suffix)]
+    return None
